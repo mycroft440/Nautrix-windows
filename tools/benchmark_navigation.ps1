@@ -60,7 +60,7 @@ $summaryPath = [IO.Path]::Combine(
 
 $summary = foreach ($group in ($records | Group-Object url)) {
     $ok = @($group.Group | Where-Object exit_code -eq 0)
-    $values = [double[]]@($ok | ForEach-Object elapsed_ms)
+    [double[]]$values = @($ok | ForEach-Object { [double]$_.elapsed_ms })
     [pscustomobject]@{
         url = $group.Name
         samples = $group.Count
