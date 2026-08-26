@@ -13,6 +13,14 @@ if errorlevel 1 exit /b 1
 set "PATH=%DEPOT%;%PATH%"
 set "DEPOT_TOOLS_WIN_TOOLCHAIN=0"
 
+rem Nautrix supports normal Google web authentication, but intentionally does
+rem not compile private Chrome/Chromium browser sign-in credentials. Clearing
+rem these prevents a developer machine environment from accidentally enabling
+rem restricted browser-level Google services such as Chrome Sync.
+set "GOOGLE_API_KEY="
+set "GOOGLE_DEFAULT_CLIENT_ID="
+set "GOOGLE_DEFAULT_CLIENT_SECRET="
+
 if not exist "%OUT%" mkdir "%OUT%"
 copy /Y "%ROOT%\chromium\args\Release.gn" "%OUT%\args.gn" >nul
 if errorlevel 1 exit /b 1

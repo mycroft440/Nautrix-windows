@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Fast validation for the Nautrix Chromium integration layer.
-
-This runs in ordinary GitHub-hosted Windows CI. It intentionally does not fetch
-or compile Chromium because a full Windows Chromium checkout/build requires
-far more disk/RAM than a standard hosted runner.
-"""
+"""Fast validation for the Nautrix Chromium integration layer."""
 
 from __future__ import annotations
 
@@ -12,7 +7,6 @@ import importlib.util
 import re
 import tempfile
 from pathlib import Path
-
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -48,9 +42,24 @@ def _parse_version() -> dict[str, str]:
 def _validate_gn_args() -> None:
     args = (REPO / "chromium/args/Release.gn").read_text(encoding="utf-8")
     assert 'target_cpu = "x64"' in args
-    assert "is_debug = false" in args
+    assert "is_official_build = true" in args, "End-user Chromium builds must use official optimization level"
+    assert "is_official_build = false" not in args
+    assert "is_component_build = false" in args
+    assert "chrome_pgo_phase = 0" in args, "Baseline build must keep PGO explicit and reproducible"
     assert "is_chrome_branded = false" in args
     assert "is_chrome_branded = true" not in args
+    assert "google_default_client_id" not in args.lower()
+    assert "google_default_client_secret" not in args.lower()
+
+
+def _validate_google_browser_credentials_disabled() -> None:
+    build = (REPO / "tools/build_chromium.cmd").read_text(encoding="utf-8")
+    for variable in (
+        "GOOGLE_API_KEY",
+        "GOOGLE_DEFAULT_CLIENT_ID",
+        "GOOGLE_DEFAULT_CLIENT_SECRET",
+    ):
+        assert f'set "{variable}="' in build, f"{variable} must be cleared during production build"
 
 
 def _validate_no_embedded_engine() -> None:
@@ -60,16 +69,15 @@ def _validate_no_embedded_engine() -> None:
             continue
         if path.suffix.lower() not in {".md", ".py", ".cmd", ".ps1", ".gn", ".yml", ".yaml", ".txt", ""}:
             continue
-        text = path.read_text(encoding="utf-8", errors="ignore")
         if path.name == "validate_nautrix.py":
             continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
         for needle in forbidden:
             assert needle not in text, f"Embedded-engine dependency still present in {path}: {needle}"
 
 
 def _validate_product_layer() -> None:
     module = _load_apply_module()
-
     with tempfile.TemporaryDirectory() as temp:
         root = Path(temp)
         branding = root / "chrome/app/theme/chromium/BRANDING"
@@ -80,59 +88,45 @@ def _validate_product_layer() -> None:
         strings.parent.mkdir(parents=True, exist_ok=True)
 
         branding.write_text(
-            "COMPANY_FULLNAME=The Chromium Authors\n"
-            "COMPANY_SHORTNAME=The Chromium Authors\n"
-            "PRODUCT_FULLNAME=Chromium\n"
-            "PRODUCT_SHORTNAME=Chromium\n"
-            "PRODUCT_INSTALLER_FULLNAME=Chromium Installer\n"
-            "PRODUCT_INSTALLER_SHORTNAME=Chromium Installer\n"
+            "COMPANY_FULLNAME=The Chromium Authors\nCOMPANY_SHORTNAME=The Chromium Authors\n"
+            "PRODUCT_FULLNAME=Chromium\nPRODUCT_SHORTNAME=Chromium\n"
+            "PRODUCT_INSTALLER_FULLNAME=Chromium Installer\nPRODUCT_INSTALLER_SHORTNAME=Chromium Installer\n"
             "COPYRIGHT=Copyright 2017 The Chromium Authors. All rights reserved.\n"
-            "MAC_BUNDLE_ID=org.chromium.Chromium\n"
-            "MAC_CREATOR_CODE=Cr24\n",
+            "MAC_BUNDLE_ID=org.chromium.Chromium\nMAC_CREATOR_CODE=Cr24\n",
             encoding="utf-8",
         )
-
         modes.write_text(
             'inline constexpr wchar_t kProductPathName[] = L"Chromium";\n'
-            '.base_app_name = L"Chromium",\n'
-            '.base_app_id = L"Chromium",\n'
-            '.browser_prog_id_prefix = L"ChromiumHTM",\n'
-            'L"Chromium HTML Document",\n'
+            '.base_app_name = L"Chromium",\n.base_app_id = L"Chromium",\n'
+            '.browser_prog_id_prefix = L"ChromiumHTM",\nL"Chromium HTML Document",\n'
             '.direct_launch_url_scheme = "chromium",\n'
-            '.pdf_prog_id_prefix = L"ChromiumPDF",\n'
-            'L"Chromium PDF Document",\n',
+            '.pdf_prog_id_prefix = L"ChromiumPDF",\nL"Chromium PDF Document",\n',
             encoding="utf-8",
         )
-
         strings.write_text(
-            '<grit><message desc="Chromium product" url="https://chromium.org">'
-            'Welcome to Chromium</message></grit>\n',
+            '<grit><message desc="Chromium product" url="https://chromium.org">Welcome to Chromium</message></grit>\n',
             encoding="utf-8",
         )
 
         module.apply(root)
         module.apply(root)
-
         assert "PRODUCT_FULLNAME=Nautrix" in branding.read_text(encoding="utf-8")
         patched_modes = modes.read_text(encoding="utf-8")
         assert 'kProductPathName[] = L"Nautrix"' in patched_modes
         assert '.base_app_name = L"Nautrix"' in patched_modes
         assert '.direct_launch_url_scheme = "nautrix"' in patched_modes
-
         patched_strings = strings.read_text(encoding="utf-8")
         assert "Welcome to Nautrix" in patched_strings
-        assert 'url="https://chromium.org"' in patched_strings, "Attributes/URLs must not be rewritten"
+        assert 'url="https://chromium.org"' in patched_strings
 
 
 def main() -> int:
     values = _parse_version()
     _validate_gn_args()
+    _validate_google_browser_credentials_disabled()
     _validate_no_embedded_engine()
     _validate_product_layer()
-    print(
-        "Nautrix Chromium layer validated: "
-        f"{values['CHANNEL']} {values['VERSION']} @ {values['REVISION']}"
-    )
+    print(f"Nautrix Chromium layer validated: {values['CHANNEL']} {values['VERSION']} @ {values['REVISION']}")
     return 0
 
 

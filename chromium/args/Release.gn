@@ -1,16 +1,18 @@
-# Nautrix Windows production baseline.
-# Keep this intentionally conservative until the first full Chromium build
-# and latency benchmark are complete.
+# Nautrix Windows performance/production baseline.
+# This is an end-user optimized Chromium build, without Google Chrome branding.
 
-is_debug = false
+is_official_build = true
 is_component_build = false
 target_cpu = "x64"
 
-# Reduce build/link overhead without changing browser behavior.
+# First reproducible full build: keep Chromium PGO disabled until the baseline
+# binary is validated. PGO is a separate measured optimization milestone.
+chrome_pgo_phase = 0
+
+# Keep release artifacts small and linking focused on production output.
 symbol_level = 0
 blink_symbol_level = 0
 v8_symbol_level = 0
 
-# Nautrix is an open-source Chromium-derived build, not Google Chrome.
+# Nautrix is a Chromium-derived browser, not Google Chrome.
 is_chrome_branded = false
-is_official_build = false
