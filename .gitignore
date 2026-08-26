@@ -1,0 +1,33 @@
+# Build output
+/build/
+/out/
+
+# Downloaded dependencies
+/packages/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.VC.db
+*.VC.VC.opendb
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+
+# Binaries
+*.exe
+*.dll
+*.lib
+*.pdb
+*.obj
+
+# Local IDE files
+.vscode/
+.idea/
+
+# OS files
+Thumbs.db
+Desktop.ini
