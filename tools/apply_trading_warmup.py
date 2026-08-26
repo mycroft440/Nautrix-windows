@@ -39,6 +39,13 @@ def apply(source_root: Path) -> None:
         '#include "base/strings/string_split.h"',
         path,
     )
+    text = insert_once(
+        text,
+        '#include "content/public/browser/render_process_host.h"\n',
+        '#include "content/public/browser/spare_render_process_host_manager.h"\n',
+        '#include "content/public/browser/spare_render_process_host_manager.h"',
+        path,
+    )
 
     helper = r'''
 
@@ -93,7 +100,7 @@ bool NautrixTradingNavigationMatches(const GURL& url) {
   if (NautrixNavigatorEnvEnabled("NAUTRIX_SPARE_RENDERER_WARMUP") &&
       NautrixNavigatorEnvEnabled("NAUTRIX_INTENT_PRECONNECT") &&
       NautrixTradingNavigationMatches(params->url)) {
-    content::RenderProcessHost::WarmupSpareRenderProcessHost(
+    content::SpareRenderProcessHostManager::Get().WarmupSpare(
         params->initiating_profile);
   }
 '''
