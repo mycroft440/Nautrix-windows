@@ -19,14 +19,6 @@ def insert_once(text: str, anchor: str, addition: str, marker: str, path: Path) 
     return text.replace(anchor, anchor + addition, 1)
 
 
-def replace_once(text: str, old: str, new: str, marker: str, path: Path) -> str:
-    if marker in text:
-        return text
-    if old not in text:
-        raise RuntimeError(f"{path}: expected pattern not found")
-    return text.replace(old, new, 1)
-
-
 def patch_network(source_root: Path) -> None:
     path = source_root / "services/network/url_loader.cc"
     text = path.read_text(encoding="utf-8")
@@ -130,6 +122,8 @@ def patch_blink_header(source_root: Path) -> None:
         "\n  // NAUTRIX_TRADING_SCHEDULER_FIELD\n"
         "  // Cached per-document decision; refreshed by TraceUrlChange().\n"
         "  bool nautrix_low_latency_page_ = false;\n"
+        "  // Windows high-resolution timer activation must be exactly paired.\n"
+        "  bool nautrix_high_resolution_timer_active_ = false;\n"
     )
     text = insert_once(text, anchor, addition, FIELD_MARKER, path)
     path.write_text(text, encoding="utf-8", newline="\n")
@@ -155,6 +149,14 @@ def patch_blink_impl(source_root: Path) -> None:
         '#include "base/strings/string_split.h"',
         path,
     )
+    if '#include "build/build_config.h"\n' not in text:
+        text = insert_once(
+            text,
+            '#include "base/time/time.h"\n',
+            '#include "build/build_config.h"\n',
+            '#include "build/build_config.h"',
+            path,
+        )
 
     helper = r'''
 
@@ -210,6 +212,21 @@ bool NautrixTradingUrlMatches(std::string url) {
     new_trace = '''void FrameSchedulerImpl::TraceUrlChange(const String& url) {
   const bool previous_nautrix_low_latency_page = nautrix_low_latency_page_;
   nautrix_low_latency_page_ = NautrixTradingUrlMatches(url.Utf8());
+#if BUILDFLAG(IS_WIN)
+  const bool should_activate_nautrix_high_resolution_timer =
+      frame_type_ == FrameType::kMainFrame && nautrix_low_latency_page_ &&
+      NautrixSchedulerEnvEnabled("NAUTRIX_HIGH_RES_TIMER");
+  if (should_activate_nautrix_high_resolution_timer &&
+      !nautrix_high_resolution_timer_active_) {
+    base::Time::EnableHighResolutionTimer(true);
+    nautrix_high_resolution_timer_active_ =
+        base::Time::ActivateHighResolutionTimer(true);
+  } else if (!should_activate_nautrix_high_resolution_timer &&
+             nautrix_high_resolution_timer_active_) {
+    base::Time::ActivateHighResolutionTimer(false);
+    nautrix_high_resolution_timer_active_ = false;
+  }
+#endif
   if (previous_nautrix_low_latency_page != nautrix_low_latency_page_) {
     UpdatePolicy();
   }
@@ -221,6 +238,22 @@ bool NautrixTradingUrlMatches(std::string url) {
     if old_trace not in text:
         raise RuntimeError(f"{path}: TraceUrlChange anchor not found")
     text = text.replace(old_trace, new_trace, 1)
+
+    old_destructor = '''FrameSchedulerImpl::~FrameSchedulerImpl() {
+  weak_factory_.InvalidateWeakPtrs();
+'''
+    new_destructor = '''FrameSchedulerImpl::~FrameSchedulerImpl() {
+#if BUILDFLAG(IS_WIN)
+  if (nautrix_high_resolution_timer_active_) {
+    base::Time::ActivateHighResolutionTimer(false);
+    nautrix_high_resolution_timer_active_ = false;
+  }
+#endif
+  weak_factory_.InvalidateWeakPtrs();
+'''
+    if old_destructor not in text:
+        raise RuntimeError(f"{path}: destructor anchor not found")
+    text = text.replace(old_destructor, new_destructor, 1)
 
     old_lifecycle = '''  if (subresource_loading_paused_ && type == ObserverType::kLoader)
     return SchedulingLifecycleState::kStopped;
