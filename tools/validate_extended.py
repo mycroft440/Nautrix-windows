@@ -44,7 +44,7 @@ def validate_configs() -> None:
         "keepalive_ping_seconds=25",
         "enable_network_priority_boost=1",
         "enable_selective_throttling_bypass=1",
-        "enable_warm_renderer_pool=1",
+        "preserve_chromium_spare_renderer=1",
         "enable_intent_preconnect=1",
         "optimistic_dns_for_tcp=ab",
         "websocket_over_http3=ab",
@@ -85,11 +85,11 @@ def validate_native_tools() -> None:
         "NAUTRIX_SELECTIVE_THROTTLING_BYPASS",
         "OptimisticDnsForTcp",
         "EnableWebsocketsOverHttp3",
-        "PreferWarmRendererProcess",
-        "SpareRendererForSitePerProcess",
         "StableAbBucket",
     ):
         assert token in launcher, f"missing launcher latency token: {token}"
+    assert "PreferWarmRendererProcess" not in launcher
+    assert "SpareRendererForSitePerProcess" not in launcher
 
 
 def validate_trading_latency_tools() -> None:
