@@ -92,9 +92,16 @@ def validate_automation() -> None:
     assert "nautrix-chromium" in full
     assert "NautrixSetup.exe" in full
     assert "runtime_smoke.ps1" in full
+
     regression = read(".github/workflows/runtime-regression.yml")
-    assert "benchmark_navigation.ps1" in regression
-    assert "profile_runtime.ps1" in regression
+    for token in (
+        "runtime_smoke.ps1",
+        "chromium_network_probe.ps1",
+        "benchmark_navigation.ps1",
+        "profile_browser.ps1",
+    ):
+        assert token in regression, f"runtime regression missing: {token}"
+
     bootstrap = read("tools/bootstrap_chromium.cmd")
     assert "apply_preconnect.py" in bootstrap
 
