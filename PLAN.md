@@ -9,9 +9,10 @@
 5. [x] Add startup/network/process measurement tooling and regression automation.
 6. [x] Add baseline + PGO build paths and comparison automation.
 7. [x] Add self-hosted full Chromium build/package/runtime workflow.
-8. [ ] Execute the complete Chromium build on a capable Windows runner.
-9. [ ] Execute non-interactive and interactive runtime compatibility/performance gates on that binary.
-10. [ ] Keep only optimizations proven beneficial by the runtime measurements.
+8. [x] Implement source-level Trading Mode and low-latency Chromium patches.
+9. [ ] Execute the complete Chromium build on a capable Windows runner.
+10. [ ] Execute non-interactive and interactive runtime compatibility/performance gates on that binary.
+11. [ ] Keep only experimental optimizations proven beneficial by runtime measurements.
 
 ## Architecture
 
@@ -76,25 +77,49 @@ Official Chrome Sync remains outside the target because Google restricts the pri
 - [x] Parallel provider benchmark.
 - [x] Direct DoH HTTPS-path measurement.
 - [x] Priority-host DNS-answer + TCP/443 IPv4/IPv6 route scoring.
+- [x] Route scoring expanded across MEXC, Binance, Bybit, OKX, Kraken, Coinbase and TradingView.
 - [x] Winner cache per network signature.
 - [x] Retest after active adapter/address/system-DNS changes.
 - [x] Switching hysteresis.
 - [x] Chromium Network Service `DnsConfigOverrides` integration.
 - [x] Secure DNS/DoH retained for selected resolver.
+- [x] HTTPS/SVCB kept enabled on the pinned Chromium revision.
 - [x] Exact pinned Chromium `network_service.cc` validation in hosted CI.
 - [x] CSV metrics/state output.
 - [ ] Verify actual DNS/DoH events with the complete Chromium binary's NetLog.
 
-## Performance / low latency
+## Trading Mode / low latency
+
+- [x] `automatic`, `normal`, and `aggressive` modes.
+- [x] Automatic domain matching for MEXC, Binance, Bybit, OKX, Kraken, Coinbase and TradingView.
+- [x] Editable trading-site/origin lists.
+- [x] Manual mode switch script.
+- [x] Automatic mode applies aggressive scheduling/network policy only to configured trading domains.
+- [x] Normal mode preserves standard Chromium request/scheduler behavior.
+- [x] Aggressive mode applies the low-latency matching policy globally.
+- [x] Chromium `URLRequest` selective priority boost to `net::HIGHEST`.
+- [x] Selective Blink background/intensive throttling bypass.
+- [x] Selective Blink high task priority while preserving special Chromium queue priorities.
+- [x] Trading-site tab discard protection.
+- [x] Trading-site renderer/worker foreground-priority preference.
+- [x] Priority origins exported by launcher.
+- [x] Priority origins patched into Chromium's existing partitioned `PreconnectManager` path.
+- [x] Bounded persistent preconnect/connection keep-alive with configurable idle and ping periods.
+- [x] Configurable intent/preconnect policy hook.
+- [x] QUIC/HTTP3 kept enabled by default.
+- [x] Stable per-machine A/B switch for Optimistic DNS for TCP and related DNS/IPv6 fallback features.
+- [x] Stable per-machine A/B switch for WebSocket over HTTP/3.
+- [x] Warm-renderer preference/pool feature injection.
+- [x] Exact pinned Chromium validators for trading priority, scheduler/network patch and keep-alive patch.
+- [ ] Full-build compile validation of the patched Chromium translation units.
+- [ ] Runtime A/B comparison before forcing experimental switches globally.
+
+## Performance measurement / Windows diagnostics
 
 - [x] Chromium production optimization level.
 - [x] Preserve browser/network/GPU/renderer isolation.
-- [x] Keep QUIC/HTTP3, DNS cache, socket pooling and GPU enabled by default.
 - [x] Configurable Happy Eyeballs V3.
 - [x] Configurable non-realtime root browser process priority.
-- [x] Priority origins exported by launcher.
-- [x] Priority origins patched into Chromium's existing `PreconnectManager` path.
-- [x] Exact pinned preconnect source patch validation in hosted CI.
 - [x] NetLog capture on demand; off during normal browsing.
 - [x] Startup/input trace capture on demand; off during normal browsing.
 - [x] NetLog duration summarizer for host resolution/connect/SSL/QUIC/HTTP/request events.
@@ -102,15 +127,19 @@ Official Chrome Sync remains outside the target because Google restricts the pri
 - [x] Browser process-creation timing log.
 - [x] CPU/RAM/process-tree profiler.
 - [x] Headless navigation regression benchmark.
+- [x] Navigation benchmark reports min/mean/p50/p95/p99/max.
 - [x] Chromium NetLog priority-site probe.
 - [x] Baseline-vs-PGO benchmark script/workflow.
 - [x] Self-hosted runtime-regression workflow.
+- [x] Read-only Windows/NIC diagnostics for RSS, RSC, interrupt moderation, energy/buffer properties and global TCP state.
+- [x] NIC diagnostic tooling never silently modifies adapter/Windows network configuration.
 - [ ] Measure cold/warm startup on actual Nautrix browser.
 - [ ] Measure DNS/TCP/TLS/QUIC/response-start timings on actual Nautrix browser.
+- [ ] Measure p50/p95/p99 navigation latency on actual Nautrix browser.
 - [ ] Measure CPU/RAM/GPU behavior on actual Nautrix browser.
 - [ ] Capture real user-input-to-frame latency using the diagnostic trace on an interactive Windows session.
 - [ ] Compare baseline vs PGO on the same hardware/network and select the winner.
 
 ## Final hard gate
 
-All remaining unchecked items require a complete Chromium-derived browser binary and, for Google/passkey/input checks, an interactive Windows user session. The repository now contains the automated build, runtime, NetLog, trace, resource-profile and PGO-comparison paths; hosted lightweight CI cannot truthfully substitute for those runtime tests.
+All remaining unchecked items require a complete Chromium-derived browser binary and, for Google/passkey/input checks, an interactive Windows user session. Source/hosted CI validation proves the downstream scripts and exact pinned patch anchors; it does not substitute for compiling the entire Chromium tree or measuring the final binary on real hardware.
