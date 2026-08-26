@@ -38,9 +38,12 @@ Nautrix has a native launcher and Chromium Network Service integration for DNS.
 - `mode=automatic`
 
 Automatic mode benchmarks real DNS queries against configured providers and
-scores median latency, p95, jitter and failures. The selected resolver is cached
-per network signature with hysteresis to avoid unnecessary switching. When
-configured, the chosen resolver is used through Chromium Secure DNS/DoH.
+scores median latency, p95, jitter and failures. It can also resolve configured
+`priority_hosts` through each candidate and measure TCP/443 connection setup to
+the returned route, so trading-site path quality contributes to the selection.
+The selected resolver is cached per network signature with hysteresis to avoid
+unnecessary switching. When configured, the chosen resolver is used through
+Chromium Secure DNS/DoH with the selected plain resolver available as fallback.
 
 The implementation does not change the Windows DNS configuration globally.
 
@@ -101,6 +104,7 @@ tools/
   run_nautrix.cmd
   test_google_login.cmd
   validate_nautrix.py
+  validate_upstream_dns_patch.py
 
 docs/
   ARCHITECTURE.md
@@ -112,14 +116,15 @@ PLAN.md
 
 ## CI
 
-GitHub-hosted Windows CI validates the Nautrix downstream Chromium patch layer
-and compiles the native DNS/latency launcher. It does not perform the full
-Chromium build because a complete upstream checkout/build requires a much
-larger Windows environment.
+GitHub-hosted Windows CI validates the Nautrix downstream Chromium patch layer,
+checks the DNS patch against the exact pinned upstream `network_service.cc`, and
+compiles the native DNS/latency launcher. It does not perform the full Chromium
+build because a complete upstream checkout/build requires a much larger Windows
+environment.
 
 ## Status
 
-The WebView2-to-Chromium source/build migration and the first browser-local
+The WebView2-to-Chromium source/build migration and the browser-local
 custom/automatic DNS layer are implemented in the downstream repository.
 
 The remaining gate is a full x64 Chromium build and interactive validation of

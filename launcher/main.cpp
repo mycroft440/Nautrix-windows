@@ -47,7 +47,11 @@ struct DnsSettings {
     int timeout_ms = 700;
     int retest_minutes = 30;
     double minimum_improvement_percent = 12.0;
+    int connect_timeout_ms = 800;
+    int connect_samples = 1;
+    double connect_weight = 0.35;
     std::vector<std::string> probe_domains;
+    std::vector<std::string> priority_hosts;
     std::vector<Provider> providers;
     std::vector<std::string> manual_nameservers;
     std::string manual_doh_template;
@@ -62,6 +66,8 @@ struct ProbeStats {
     double p95_ms = std::numeric_limits<double>::infinity();
     double jitter_ms = std::numeric_limits<double>::infinity();
     double failure_rate = 1.0;
+    double connect_median_ms = std::numeric_limits<double>::infinity();
+    double connect_failure_rate = 0.0;
     double score = std::numeric_limits<double>::infinity();
     std::string endpoint;
 };
@@ -219,8 +225,16 @@ DnsSettings LoadDnsSettings(const std::filesystem::path& path) {
                 settings.retest_minutes = std::clamp(std::stoi(value), 1, 1440);
             } else if (key == "minimum_improvement_percent") {
                 settings.minimum_improvement_percent = std::clamp(std::stod(value), 0.0, 50.0);
+            } else if (key == "connect_timeout_ms") {
+                settings.connect_timeout_ms = std::clamp(std::stoi(value), 100, 5000);
+            } else if (key == "connect_samples") {
+                settings.connect_samples = std::clamp(std::stoi(value), 1, 5);
+            } else if (key == "connect_weight") {
+                settings.connect_weight = std::clamp(std::stod(value), 0.0, 2.0);
             } else if (key == "probe_domains") {
                 settings.probe_domains = Split(value, ',');
+            } else if (key == "priority_hosts") {
+                settings.priority_hosts = Split(value, ',');
             } else if (key == "manual_nameservers") {
                 settings.manual_nameservers = Split(value, ',');
             } else if (key == "manual_doh_template") {
@@ -262,8 +276,8 @@ std::vector<std::uint8_t> BuildDnsQuery(const std::string& domain, std::uint16_t
     std::vector<std::uint8_t> packet(12, 0);
     packet[0] = static_cast<std::uint8_t>(id >> 8);
     packet[1] = static_cast<std::uint8_t>(id & 0xff);
-    packet[2] = 0x01;  // recursion desired
-    packet[5] = 0x01;  // QDCOUNT = 1
+    packet[2] = 0x01;
+    packet[5] = 0x01;
 
     size_t start = 0;
     while (start < domain.size()) {
@@ -283,15 +297,107 @@ std::vector<std::uint8_t> BuildDnsQuery(const std::string& domain, std::uint16_t
 
     packet.push_back(0);
     packet.push_back(0);
-    packet.push_back(1);  // QTYPE A
+    packet.push_back(1);
     packet.push_back(0);
-    packet.push_back(1);  // QCLASS IN
+    packet.push_back(1);
     return packet;
 }
 
-std::optional<double> QueryDns(const std::string& server,
-                               const std::string& domain,
-                               int timeout_ms) {
+struct DnsQueryResult {
+    double elapsed_ms = 0.0;
+    std::vector<std::string> addresses;
+};
+
+bool SkipDnsName(const std::uint8_t* response, size_t response_size, size_t* offset) {
+    if (!offset || *offset >= response_size) {
+        return false;
+    }
+
+    while (*offset < response_size) {
+        const std::uint8_t length = response[*offset];
+        if (length == 0) {
+            ++(*offset);
+            return true;
+        }
+        if ((length & 0xC0) == 0xC0) {
+            if (*offset + 1 >= response_size) {
+                return false;
+            }
+            *offset += 2;
+            return true;
+        }
+        if ((length & 0xC0) != 0 || length > 63 ||
+            *offset + 1 + length > response_size) {
+            return false;
+        }
+        *offset += 1 + length;
+    }
+    return false;
+}
+
+std::uint16_t ReadU16(const std::uint8_t* data) {
+    return static_cast<std::uint16_t>(
+        (static_cast<std::uint16_t>(data[0]) << 8) |
+        static_cast<std::uint16_t>(data[1]));
+}
+
+std::vector<std::string> ParseDnsAddresses(const std::uint8_t* response,
+                                           size_t response_size) {
+    std::vector<std::string> addresses;
+    if (response_size < 12) {
+        return addresses;
+    }
+
+    const std::uint16_t question_count = ReadU16(response + 4);
+    const std::uint32_t record_count =
+        static_cast<std::uint32_t>(ReadU16(response + 6)) +
+        static_cast<std::uint32_t>(ReadU16(response + 8)) +
+        static_cast<std::uint32_t>(ReadU16(response + 10));
+
+    size_t offset = 12;
+    for (std::uint16_t i = 0; i < question_count; ++i) {
+        if (!SkipDnsName(response, response_size, &offset) ||
+            offset + 4 > response_size) {
+            return {};
+        }
+        offset += 4;
+    }
+
+    for (std::uint32_t i = 0; i < record_count; ++i) {
+        if (!SkipDnsName(response, response_size, &offset) ||
+            offset + 10 > response_size) {
+            break;
+        }
+
+        const std::uint16_t type = ReadU16(response + offset);
+        const std::uint16_t klass = ReadU16(response + offset + 2);
+        const std::uint16_t rdlength = ReadU16(response + offset + 8);
+        offset += 10;
+        if (offset + rdlength > response_size) {
+            break;
+        }
+
+        char literal[INET6_ADDRSTRLEN]{};
+        if (klass == 1 && type == 1 && rdlength == 4) {
+            if (InetNtopA(AF_INET, const_cast<std::uint8_t*>(response + offset),
+                          literal, static_cast<DWORD>(sizeof(literal)))) {
+                addresses.emplace_back(literal);
+            }
+        } else if (klass == 1 && type == 28 && rdlength == 16) {
+            if (InetNtopA(AF_INET6, const_cast<std::uint8_t*>(response + offset),
+                          literal, static_cast<DWORD>(sizeof(literal)))) {
+                addresses.emplace_back(literal);
+            }
+        }
+        offset += rdlength;
+    }
+
+    return addresses;
+}
+
+std::optional<DnsQueryResult> QueryDns(const std::string& server,
+                                       const std::string& domain,
+                                       int timeout_ms) {
     sockaddr_storage address{};
     int address_length = 0;
     int family = AF_UNSPEC;
@@ -347,7 +453,7 @@ std::optional<double> QueryDns(const std::string& server,
         return std::nullopt;
     }
 
-    std::uint8_t response[2048]{};
+    std::uint8_t response[4096]{};
     sockaddr_storage source{};
     int source_length = sizeof(source);
     const int received = recvfrom(socket_handle,
@@ -363,15 +469,118 @@ std::optional<double> QueryDns(const std::string& server,
         return std::nullopt;
     }
 
-    const std::uint16_t response_id =
-        static_cast<std::uint16_t>((response[0] << 8) | response[1]);
+    const std::uint16_t response_id = ReadU16(response);
     const bool is_response = (response[2] & 0x80) != 0;
+    const bool is_truncated = (response[2] & 0x02) != 0;
     const int response_code = response[3] & 0x0f;
-    if (response_id != transaction_id || !is_response || response_code != 0) {
+    if (response_id != transaction_id || !is_response || is_truncated ||
+        response_code != 0) {
         return std::nullopt;
     }
 
+    DnsQueryResult result;
+    result.elapsed_ms =
+        std::chrono::duration<double, std::milli>(finished - started).count();
+    result.addresses =
+        ParseDnsAddresses(response, static_cast<size_t>(received));
+    return result;
+}
+
+std::optional<double> ConnectTcp443(const std::string& literal, int timeout_ms) {
+    sockaddr_storage address{};
+    int address_length = 0;
+    int family = AF_UNSPEC;
+
+    sockaddr_in address4{};
+    if (InetPtonA(AF_INET, literal.c_str(), &address4.sin_addr) == 1) {
+        address4.sin_family = AF_INET;
+        address4.sin_port = htons(443);
+        std::memcpy(&address, &address4, sizeof(address4));
+        address_length = sizeof(address4);
+        family = AF_INET;
+    } else {
+        sockaddr_in6 address6{};
+        if (InetPtonA(AF_INET6, literal.c_str(), &address6.sin6_addr) != 1) {
+            return std::nullopt;
+        }
+        address6.sin6_family = AF_INET6;
+        address6.sin6_port = htons(443);
+        std::memcpy(&address, &address6, sizeof(address6));
+        address_length = sizeof(address6);
+        family = AF_INET6;
+    }
+
+    SOCKET socket_handle = socket(family, SOCK_STREAM, IPPROTO_TCP);
+    if (socket_handle == INVALID_SOCKET) {
+        return std::nullopt;
+    }
+
+    u_long nonblocking = 1;
+    if (ioctlsocket(socket_handle, FIONBIO, &nonblocking) != 0) {
+        closesocket(socket_handle);
+        return std::nullopt;
+    }
+
+    const auto started = Clock::now();
+    const int connect_result =
+        connect(socket_handle, reinterpret_cast<const sockaddr*>(&address),
+                address_length);
+    if (connect_result == SOCKET_ERROR) {
+        const int error = WSAGetLastError();
+        if (error != WSAEWOULDBLOCK && error != WSAEINPROGRESS) {
+            closesocket(socket_handle);
+            return std::nullopt;
+        }
+    }
+
+    fd_set write_set;
+    FD_ZERO(&write_set);
+    FD_SET(socket_handle, &write_set);
+    timeval timeout{};
+    timeout.tv_sec = timeout_ms / 1000;
+    timeout.tv_usec = (timeout_ms % 1000) * 1000;
+
+    const int selected = select(0, nullptr, &write_set, nullptr, &timeout);
+    if (selected <= 0 || !FD_ISSET(socket_handle, &write_set)) {
+        closesocket(socket_handle);
+        return std::nullopt;
+    }
+
+    int socket_error = 0;
+    int error_length = sizeof(socket_error);
+    if (getsockopt(socket_handle, SOL_SOCKET, SO_ERROR,
+                   reinterpret_cast<char*>(&socket_error),
+                   &error_length) != 0 ||
+        socket_error != 0) {
+        closesocket(socket_handle);
+        return std::nullopt;
+    }
+
+    const auto finished = Clock::now();
+    closesocket(socket_handle);
     return std::chrono::duration<double, std::milli>(finished - started).count();
+}
+
+std::optional<double> MeasurePriorityHostConnect(const std::string& dns_server,
+                                                 const std::string& host,
+                                                 const DnsSettings& settings) {
+    const auto resolved = QueryDns(dns_server, host, settings.timeout_ms);
+    if (!resolved || resolved->addresses.empty()) {
+        return std::nullopt;
+    }
+
+    std::optional<double> best;
+    size_t tested = 0;
+    for (const std::string& address : resolved->addresses) {
+        if (tested++ >= 4) {
+            break;
+        }
+        const auto elapsed = ConnectTcp443(address, settings.connect_timeout_ms);
+        if (elapsed && (!best || *elapsed < *best)) {
+            best = elapsed;
+        }
+    }
+    return best;
 }
 
 ProbeStats CalculateStats(std::vector<double> samples,
@@ -423,15 +632,52 @@ ProbeStats BenchmarkEndpoint(const std::string& endpoint,
     for (int i = 0; i < settings.samples; ++i) {
         const std::string& domain =
             settings.probe_domains[static_cast<size_t>(i) % settings.probe_domains.size()];
-        const auto elapsed = QueryDns(endpoint, domain, settings.timeout_ms);
-        if (elapsed) {
-            samples.push_back(*elapsed);
+        const auto result = QueryDns(endpoint, domain, settings.timeout_ms);
+        if (result) {
+            samples.push_back(result->elapsed_ms);
         } else {
             ++failures;
         }
     }
-    return CalculateStats(std::move(samples), failures, settings.samples,
-                          settings.timeout_ms, endpoint);
+
+    ProbeStats stats = CalculateStats(std::move(samples), failures, settings.samples,
+                                     settings.timeout_ms, endpoint);
+
+    if (!settings.priority_hosts.empty() && settings.connect_weight > 0.0) {
+        std::vector<double> connect_samples;
+        int connect_failures = 0;
+        int connect_attempts = 0;
+
+        for (const std::string& host : settings.priority_hosts) {
+            for (int sample = 0; sample < settings.connect_samples; ++sample) {
+                ++connect_attempts;
+                const auto elapsed = MeasurePriorityHostConnect(endpoint, host, settings);
+                if (elapsed) {
+                    connect_samples.push_back(*elapsed);
+                } else {
+                    ++connect_failures;
+                }
+            }
+        }
+
+        if (connect_attempts > 0) {
+            stats.connect_failure_rate =
+                static_cast<double>(connect_failures) /
+                static_cast<double>(connect_attempts);
+            if (!connect_samples.empty()) {
+                std::sort(connect_samples.begin(), connect_samples.end());
+                const size_t middle = connect_samples.size() / 2;
+                stats.connect_median_ms = connect_samples.size() % 2 == 0
+                    ? (connect_samples[middle - 1] + connect_samples[middle]) / 2.0
+                    : connect_samples[middle];
+                stats.score += settings.connect_weight * stats.connect_median_ms;
+            }
+            stats.score += stats.connect_failure_rate *
+                           static_cast<double>(settings.connect_timeout_ms);
+        }
+    }
+
+    return stats;
 }
 
 ProbeStats BenchmarkProvider(const Provider& provider,
@@ -605,7 +851,7 @@ void ApplyDnsEnvironment(const std::vector<std::string>& nameservers,
     }
 
     if (prefer_encrypted && !doh_template.empty()) {
-        SetEnvironmentVariableW(L"NAUTRIX_DNS_MODE", L"secure");
+        SetEnvironmentVariableW(L"NAUTRIX_DNS_MODE", L"automatic");
         SetEnvironmentVariableW(L"NAUTRIX_DOH_TEMPLATES",
                                 Utf8ToWide(doh_template).c_str());
     } else if (!nameserver_list.empty()) {
@@ -656,8 +902,13 @@ const Provider* SelectAutomaticProvider(const DnsSettings& settings,
                   << " median=" << metrics[i].median_ms
                   << "ms p95=" << metrics[i].p95_ms
                   << "ms jitter=" << metrics[i].jitter_ms
-                  << "ms failures=" << (metrics[i].failure_rate * 100.0)
-                  << "% score=" << metrics[i].score << "\n";
+                  << "ms failures=" << (metrics[i].failure_rate * 100.0);
+        if (std::isfinite(metrics[i].connect_median_ms)) {
+            std::cout << "% connect=" << metrics[i].connect_median_ms
+                      << "ms connect_failures="
+                      << (metrics[i].connect_failure_rate * 100.0);
+        }
+        std::cout << "% score=" << metrics[i].score << "\n";
         if (metrics[i].score < best_score) {
             best_score = metrics[i].score;
             best_index = i;

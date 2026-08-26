@@ -72,6 +72,9 @@ def _validate_dns_and_latency_config() -> None:
         "samples=",
         "timeout_ms=",
         "minimum_improvement_percent=",
+        "priority_hosts=",
+        "connect_timeout_ms=",
+        "connect_weight=",
         "provider=cloudflare|",
         "provider=google|",
         "provider=quad9|",
@@ -81,6 +84,9 @@ def _validate_dns_and_latency_config() -> None:
     assert "enable_happy_eyeballs_v3=" in latency
     for symbol in (
         "BenchmarkProvider",
+        "ParseDnsAddresses",
+        "ConnectTcp443",
+        "MeasurePriorityHostConnect",
         "NetworkSignature",
         "NAUTRIX_DNS_MODE",
         "NAUTRIX_DNS_NAMESERVERS",

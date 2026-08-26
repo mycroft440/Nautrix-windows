@@ -58,12 +58,13 @@ thrashing from tiny or temporary differences.
 ## Encrypted DNS
 
 When `prefer_encrypted=1` and the selected provider has a DoH template, Nautrix
-uses Chromium Secure DNS with that provider. The initial automatic score is
-currently measured with direct UDP DNS queries to the provider IPs. That gives
-a reliable local resolver-latency baseline, but it is not yet a measurement of
-the full HTTPS/DoH path.
+uses Chromium Secure DNS in automatic mode with that provider, retaining the
+selected plain resolver as fallback for resilience. The initial automatic score
+is currently measured with direct UDP DNS queries to the provider IPs. That
+gives a reliable local resolver-latency baseline, but it is not yet a
+measurement of the full HTTPS/DoH path.
 
-After the first full Chromium runtime build, a second-stage benchmark will use
+After the first full Chromium runtime build, a later benchmark will use
 Chromium NetLog/metrics to compare the actual encrypted resolution path before
 we tune the score further.
 
@@ -75,9 +76,18 @@ site. Therefore DNS latency, TCP/QUIC connection setup, TLS, network RTT/jitter,
 server response time and rendering/input latency are tracked as separate
 metrics.
 
-`probe_domains` can include the domains that matter most to the user. A future
-second-stage scorer will also evaluate connection quality to configured
-priority/trading hosts so DNS choice cannot win solely by answering quickly.
+`probe_domains` can include the domains that matter most to the user.
+
+`priority_hosts` is already used by the automatic selector. For every candidate
+resolver, Nautrix resolves each priority host through that resolver, extracts
+the returned IPv4 addresses, measures TCP/443 connection setup and adds that
+route latency/failure signal to the resolver score. This prevents a DNS from
+winning solely because it answers quickly while returning a worse CDN/edge
+route for an important trading site.
+
+This TCP connect probe is intentionally not described as full end-to-end
+browser latency: TLS, HTTP/2 or HTTP/3/QUIC, first byte and application/server
+processing are measured separately in later runtime stages.
 
 ## Happy Eyeballs V3
 
@@ -110,7 +120,8 @@ In particular:
 1. Full Chromium x64 runtime build.
 2. Validate browser-local custom DNS and Secure DNS.
 3. Capture NetLog for selected providers.
-4. Add end-to-end priority-host connection scoring.
+4. Extend priority-host scoring from DNS + TCP/443 to TLS/QUIC/first-byte
+   measurements captured from the real Chromium network stack.
 5. Add controlled pre-resolve/preconnect for configured priority sites using
    Chromium's existing loading predictor/preconnect facilities.
 6. Benchmark Happy Eyeballs V3 on/off.

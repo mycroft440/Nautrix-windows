@@ -71,11 +71,14 @@ the private Chrome services used by third-party Chromium-derived browsers.
 - [x] Add hysteresis before switching resolver.
 - [x] Patch Chromium Network Service to use `DnsConfigOverrides`.
 - [x] Keep Chromium Secure DNS/DoH available for the selected resolver.
+- [x] Validate the DNS patch automatically against the exact pinned Chromium
+      `network_service.cc` in hosted CI.
+- [x] Add priority-host DNS-route scoring using resolver answers + TCP/443
+      connection setup for important/trading sites.
 - [ ] Validate the DNS override against the first full Chromium runtime build.
 - [ ] Measure the actual DoH HTTPS path through Chromium NetLog.
 - [ ] Add settings UI for DNS mode/providers/metrics.
-- [ ] Add end-to-end priority-host scoring so resolver selection also considers
-      the route returned for important/trading sites.
+- [ ] Extend priority-host scoring to Chromium TLS/QUIC/first-byte telemetry.
 
 ## Performance / low latency
 
@@ -84,12 +87,13 @@ the private Chrome services used by third-party Chromium-derived browsers.
 - [x] Keep QUIC, DNS cache and connection pooling enabled by default.
 - [x] Add A/B-configurable Happy Eyeballs V3 launch profile.
 - [x] Keep DNS/provider benchmarks off the renderer/DOM path.
+- [x] Add configured priority/trading-host TCP/443 route scoring to DNS selection.
+- [ ] Add Chromium-level TLS/QUIC/first-byte priority-host scoring.
 - [ ] Instrument cold and warm startup.
 - [ ] Instrument input-to-browser-process latency.
 - [ ] Instrument page/navigation timing.
 - [ ] Instrument DNS, TCP/QUIC connect, TLS, first-byte, RTT and jitter separately.
 - [ ] Profile CPU/RAM/GPU process behavior.
-- [ ] Add configured priority/trading-host connection scoring.
 - [ ] Add controlled pre-resolve/preconnect for priority hosts using Chromium's
       existing prediction/preconnect machinery.
 - [ ] Establish a performance regression suite before aggressive tuning.
@@ -98,7 +102,7 @@ the private Chrome services used by third-party Chromium-derived browsers.
 
 ## Next objective
 
-Get the native DNS/latency launcher green in Windows CI, then complete the first
-full Chromium-based Nautrix x64 build. Runtime validation will cover normal
-navigation, Google web login, custom/automatic DNS and the first latency
+Keep the native DNS/latency launcher green in Windows CI, then complete the
+first full Chromium-based Nautrix x64 build. Runtime validation will cover
+normal navigation, Google web login, custom/automatic DNS and the first latency
 benchmarks before more aggressive network tuning.
