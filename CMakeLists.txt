@@ -33,10 +33,15 @@ endif()
 
 add_executable(Nautrix WIN32
     src/main.cpp
+    src/BrowserWindow.cpp
+    src/BrowserWindow.h
+    src/Navigation.cpp
+    src/Navigation.h
 )
 
 target_include_directories(Nautrix PRIVATE
     "${WEBVIEW2_INCLUDE_DIR}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
 )
 
 target_compile_definitions(Nautrix PRIVATE
