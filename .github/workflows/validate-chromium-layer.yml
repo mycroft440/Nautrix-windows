@@ -44,6 +44,10 @@ jobs:
         shell: pwsh
         run: python tools/validate_upstream_trading_patch.py
 
+      - name: Validate trading latency and keepalive patches against pinned Chromium
+        shell: pwsh
+        run: python tools/validate_upstream_trading_latency_patch.py
+
       - name: Build native DNS/latency tools
         shell: cmd
         run: tools\build_launcher.cmd
