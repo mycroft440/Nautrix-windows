@@ -39,6 +39,14 @@ def apply(source_root: Path) -> None:
 // NAUTRIX_TRADING_PRIORITY_BEGIN
 namespace {
 
+bool NautrixTradingPolicyEnabled(const char* name, bool fallback = true) {
+  auto environment = base::Environment::Create();
+  const auto raw = environment->GetVar(name);
+  if (!raw.has_value()) return fallback;
+  return *raw != "0" && !base::EqualsCaseInsensitiveASCII(*raw, "false") &&
+         !base::EqualsCaseInsensitiveASCII(*raw, "off");
+}
+
 base::Value::List GetNautrixTradingSites() {
   base::Value::List sites;
   auto environment = base::Environment::Create();
@@ -64,6 +72,24 @@ base::Value::List GetNautrixTradingSites() {
   return sites;
 }
 
+base::Value::List GetNautrixLifecycleProtectedSites() {
+  if (!NautrixTradingPolicyEnabled("NAUTRIX_FREEZING_PROTECTION")) {
+    return {};
+  }
+  return GetNautrixTradingSites();
+}
+
+base::Value::List GetNautrixForegroundPrioritySites() {
+  // On Windows Chromium's kUserBlocking process priority path also clears
+  // EcoQoS. Treat these two settings as one atomic policy so neither switch is
+  // a cosmetic no-op.
+  if (!NautrixTradingPolicyEnabled("NAUTRIX_TRADING_PROCESS_PRIORITY") ||
+      !NautrixTradingPolicyEnabled("NAUTRIX_DISABLE_ECOQOS")) {
+    return {};
+  }
+  return GetNautrixTradingSites();
+}
+
 }  // namespace
 // NAUTRIX_TRADING_PRIORITY_END
 '''
@@ -81,9 +107,9 @@ base::Value::List GetNautrixTradingSites() {
     )
     new = (
         "  registry->RegisterListPref(kManagedTabDiscardingExceptions,\n"
-        "                             GetNautrixTradingSites());\n"
+        "                             GetNautrixLifecycleProtectedSites());\n"
         "  registry->RegisterListPref(kForceForegroundPriorityForUrls,\n"
-        "                             GetNautrixTradingSites());\n"
+        "                             GetNautrixForegroundPrioritySites());\n"
     )
     if old not in text:
         raise RuntimeError(f"{path}: trading preference registration anchor not found")
