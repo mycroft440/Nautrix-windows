@@ -27,8 +27,8 @@ Build a functional Windows-first browser focused on responsiveness, low latency,
 - [x] Per-monitor DPI awareness
 - [x] Dedicated WebView2 user-data directory
 - [x] Debug and Release CI plan
-- [ ] Validate CI build successfully
-- [ ] Validate executable artifact launches on Windows
+- [x] Validate CI build successfully
+- [ ] Validate executable artifact launches interactively on Windows
 
 ### Browser functionality
 
@@ -66,6 +66,10 @@ Build a functional Windows-first browser focused on responsiveness, low latency,
 - [ ] Add hysteresis to prevent frequent DNS switching
 - [ ] Re-test after network/VPN/interface changes
 
+## Completed objective
+
+The first Windows x64 Debug and Release builds compile successfully in GitHub Actions and produce `Nautrix.exe` artifacts.
+
 ## Next objective
 
-Get the first Windows x64 Debug and Release builds green in GitHub Actions, fix all compiler/linker issues found by CI, and review the executable foundation before starting tabs.
+Validate the executable interactively on Windows, then implement the first real tab model so new-window requests open as tabs instead of replacing the current page.
