@@ -1,33 +1,20 @@
-# Build output
-/build/
-/out/
+# Chromium checkout/builds are huge and are never committed.
+.chromium-work/
+.chromium-cache/
 
-# Downloaded dependencies
-/packages/
+# Nautrix build/package output
+dist/
+artifacts/
 
-# Visual Studio
+# IDE/OS
 .vs/
-*.user
-*.suo
-*.VC.db
-*.VC.VC.opendb
-
-# CMake
-CMakeCache.txt
-CMakeFiles/
-cmake_install.cmake
-
-# Binaries
-*.exe
-*.dll
-*.lib
-*.pdb
-*.obj
-
-# Local IDE files
 .vscode/
 .idea/
-
-# OS files
+*.user
+*.suo
 Thumbs.db
 Desktop.ini
+
+# Python
+__pycache__/
+*.pyc

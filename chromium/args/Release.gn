@@ -1,0 +1,16 @@
+# Nautrix Windows production baseline.
+# Keep this intentionally conservative until the first full Chromium build
+# and latency benchmark are complete.
+
+is_debug = false
+is_component_build = false
+target_cpu = "x64"
+
+# Reduce build/link overhead without changing browser behavior.
+symbol_level = 0
+blink_symbol_level = 0
+v8_symbol_level = 0
+
+# Nautrix is an open-source Chromium-derived build, not Google Chrome.
+is_chrome_branded = false
+is_official_build = false

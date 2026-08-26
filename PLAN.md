@@ -2,74 +2,80 @@
 
 ## Objective
 
-Build a functional Windows-first browser focused on responsiveness, low latency, and a lightweight native interface.
+Build a full Windows browser focused on low latency and responsiveness while
+retaining normal modern-web compatibility.
 
-## Current architecture
+## Architecture decision
 
-- C++23
-- Win32 native UI
-- Microsoft WebView2 (Evergreen Runtime)
-- CMake
-- GitHub Actions for Windows x64
+- [x] C++/Chromium native Windows browser base.
+- [x] WebView2 foundation superseded.
+- [x] No CEF/Electron embedded-browser layer.
+- [x] Chromium version pinned for reproducibility.
+- [x] Nautrix product layer kept separately from the huge upstream source tree.
 
-## Requirements
+## Chromium foundation
 
-### Foundation
+- [x] Pin current Windows Stable Chromium release and git revision.
+- [x] Add official depot_tools/gclient bootstrap flow.
+- [x] Add GN Release x64 configuration.
+- [x] Add Nautrix branding/product identity patch layer.
+- [x] Give Nautrix its own Windows product/profile path.
+- [x] Add lightweight CI validation for the downstream layer.
+- [ ] Complete a full Chromium x64 build on a machine meeting upstream requirements.
+- [ ] Launch and interactively validate the produced browser.
 
-- [x] Repository initialized
-- [x] C++23/CMake project foundation
-- [x] Native Win32 main window
-- [x] WebView2 integration
-- [x] Address bar
-- [x] Back / Forward / Reload / Go
-- [x] URL input and text search
-- [x] Basic keyboard shortcuts
-- [x] Per-monitor DPI awareness
-- [x] Dedicated WebView2 user-data directory
-- [x] Debug and Release CI plan
-- [x] Validate CI build successfully
-- [ ] Validate executable artifact launches interactively on Windows
+## Baseline browser functionality inherited from Chromium
 
-### Browser functionality
+The Chromium base provides the implementation for these features; each remains
+pending until the first full Nautrix build is interactively verified.
 
-- [ ] Tabs
-- [ ] New-window handling through tabs
-- [ ] Downloads
-- [ ] History
-- [ ] Favorites
-- [ ] Session restore
-- [ ] Private mode
-- [ ] Site permissions
-- [ ] Settings
-- [ ] Default-browser registration
-- [ ] Installer
+- [ ] Tabs / multiple windows.
+- [ ] Address bar and search.
+- [ ] Downloads.
+- [ ] History and bookmarks.
+- [ ] Cookies and persistent sessions.
+- [ ] Profiles and Incognito.
+- [ ] Password/autofill facilities available in open Chromium.
+- [ ] Site permissions.
+- [ ] DevTools.
+- [ ] Extensions support.
+- [ ] WebRTC / WebGL / WebGPU according to the selected Chromium build.
+- [ ] PWA support.
 
-### Performance
+## Google authentication compatibility
 
-- [ ] Startup timing instrumentation
-- [ ] Tab-switch latency instrumentation
-- [ ] Navigation timing instrumentation
-- [ ] Background work isolation
-- [ ] Tab suspension/discard policy
-- [ ] Profile CPU/RAM use
-- [ ] Profile cold/warm startup
+- [x] Remove embedded WebView architecture that Google explicitly restricts.
+- [x] Use standalone Chromium browser architecture.
+- [ ] Test `accounts.google.com` interactively.
+- [ ] Test Gmail/YouTube Google account sessions.
+- [ ] Test third-party "Continue with Google" OAuth/FedCM flow.
+- [ ] Test 2FA and WebAuthn/passkeys.
+- [ ] Verify sessions survive browser restart.
 
-### Automatic DNS optimizer
+Official Chrome Sync is not an implementation target because Google restricts
+the private Chrome services used by third-party Chromium-derived browsers.
 
-- [ ] Detect active network changes
-- [ ] Benchmark multiple DNS resolvers
-- [ ] Measure real DNS resolution latency, not ICMP ping only
-- [ ] Track median, p95, jitter, timeout rate, and failure rate
-- [ ] Support DNS-over-HTTPS where technically appropriate
-- [ ] Avoid changing global Windows DNS without explicit user action
-- [ ] Select resolver only after sufficient samples
-- [ ] Add hysteresis to prevent frequent DNS switching
-- [ ] Re-test after network/VPN/interface changes
+## Performance / low latency
 
-## Completed objective
+- [ ] Instrument cold and warm startup.
+- [ ] Instrument input-to-browser-process latency.
+- [ ] Instrument page/navigation timing.
+- [ ] Instrument DNS resolution time, network RTT and jitter independently.
+- [ ] Profile CPU/RAM/GPU process behavior.
+- [ ] Establish a performance regression suite before aggressive tuning.
+- [ ] Keep future latency-critical trading/API work outside renderer/DOM paths.
 
-The first Windows x64 Debug and Release builds compile successfully in GitHub Actions and produce `Nautrix.exe` artifacts.
+## Automatic DNS optimizer
+
+- [ ] Integrate with Chromium host resolution/network stack.
+- [ ] Benchmark real DNS query latency rather than ICMP ping.
+- [ ] Track median, p95, jitter, timeout and failure rate.
+- [ ] Support encrypted DNS where appropriate.
+- [ ] Add hysteresis before resolver changes.
+- [ ] Re-test on interface/VPN/network changes.
+- [ ] Avoid global Windows DNS changes by default.
 
 ## Next objective
 
-Validate the executable interactively on Windows, then implement the first real tab model so new-window requests open as tabs instead of replacing the current page.
+Complete the first full Chromium-based Nautrix x64 build, then validate normal
+navigation and Google web login before beginning latency tuning.

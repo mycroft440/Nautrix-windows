@@ -1,0 +1,25 @@
+name: Validate Chromium Integration
+
+on:
+  push:
+    branches:
+      - main
+      - 'feat/**'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Validate Nautrix Chromium layer
+        shell: pwsh
+        run: python tools/validate_nautrix.py

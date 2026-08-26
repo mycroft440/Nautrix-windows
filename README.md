@@ -1,68 +1,84 @@
 # Nautrix Windows
 
-Nautrix Windows is a Windows-first web browser focused on responsiveness, low latency, and a lightweight native interface.
+Nautrix Windows is a Windows browser focused on responsiveness and low latency.
 
-## Current foundation
+The browser is now based on the **full Chromium source tree**, not WebView2,
+CEF, Electron, or another embedded webview layer.
 
-- C++23
-- Native Win32 user interface
-- Microsoft WebView2 for web content
-- CMake build
-- Windows x64 Debug and Release builds in GitHub Actions
-- Per-monitor DPI awareness
-- Native address bar and navigation controls
+## Current Chromium base
 
-The project intentionally keeps browser chrome in native Win32 code while using WebView2 only for web-content rendering.
+The downstream layer is pinned to the Windows Stable Chromium release recorded
+in `chromium/VERSION`:
 
-## Requirements
+- Chromium `152.0.7977.65`
+- revision `fc4d67f1788019a27e32511137ceccbd2fafdaaa`
 
-- Windows 10/11 x64
-- Visual Studio 2022 Build Tools or Visual Studio 2022 with Desktop development with C++
-- CMake 3.25+
-- Microsoft Edge WebView2 Evergreen Runtime
-- PowerShell
+Chromium source itself is not vendored into this GitHub repository. The build
+scripts create a local `.chromium-work/` checkout and apply the Nautrix product
+layer on top of that exact upstream revision.
 
-## Build locally
+## Why this architecture
 
-From the repository root:
+A full Chromium browser gives Nautrix the same open browser platform used by
+Chromium-derived desktop browsers: Blink, V8, the Chromium network stack,
+cookies/site storage, WebAuthn/passkeys, FedCM, multiprocess rendering, GPU
+compositing, tabs, downloads, history, profiles, DevTools and other browser
+facilities.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/bootstrap.ps1
-cmake -S . -B build -A x64
-cmake --build build --config Release --parallel
+This removes the embedded-user-agent limitation of the old WebView2 prototype.
+
+It does **not** make Nautrix Google Chrome. Private Google Chrome services such
+as official Chrome Sync are not enabled and are not impersonated.
+
+## Build
+
+See [`docs/CHROMIUM_BUILD.md`](docs/CHROMIUM_BUILD.md).
+
+Typical flow from `cmd.exe`:
+
+```bat
+tools\bootstrap_chromium.cmd
+tools\build_chromium.cmd
+tools\run_nautrix.cmd
 ```
 
-The resulting executable is expected at:
+Interactive Google account compatibility test:
+
+```bat
+tools\test_google_login.cmd
+```
+
+## Repository layout
 
 ```text
-build/Release/Nautrix.exe
+chromium/
+  VERSION              pinned upstream Stable version/revision
+  args/Release.gn      Windows x64 production baseline
+
+tools/
+  bootstrap_chromium.cmd
+  apply_nautrix.py
+  build_chromium.cmd
+  run_nautrix.cmd
+  test_google_login.cmd
+  validate_nautrix.py
+
+docs/
+  ARCHITECTURE.md
+  CHROMIUM_BUILD.md
+
+PLAN.md
 ```
 
-For a Debug build:
+## CI
 
-```powershell
-cmake --build build --config Debug --parallel
-```
+GitHub-hosted CI validates the Nautrix patch/configuration layer. It does not
+perform the full Chromium build because upstream Chromium requires a very large
+Windows checkout/build environment. The full binary build is performed on a
+Windows workstation or self-hosted runner that meets Chromium's requirements.
 
-## First implemented browser controls
+## Status
 
-- Back
-- Forward
-- Reload
-- Address/search bar
-- Go
-- `Ctrl+L` focuses the address bar
-- `Ctrl+R` reloads
-- `F5` reloads
-
-Text entered without a recognizable host is sent to Google Search. Normal hosts are opened over HTTPS by default.
-
-## WebView2 SDK
-
-The SDK is pinned by the build to `Microsoft.Web.WebView2 1.0.4129.50`. The bootstrap script downloads and extracts that exact SDK package so local and CI builds use the same headers and loader library.
-
-The runtime itself is not bundled at this stage; Nautrix uses the installed Evergreen WebView2 Runtime.
-
-## Development plan
-
-See [`PLAN.md`](PLAN.md).
+The source/build migration from WebView2 to Chromium is implemented in the
+repository. The next gate is a full x64 Chromium build and interactive browser
+validation, including Google web login.
