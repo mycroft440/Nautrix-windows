@@ -28,7 +28,7 @@ def apply(source_root: Path) -> None:
     text = insert_once(
         text,
         '#include "base/functional/bind.h"\n',
-        '#include "base/environment.h"\n#include "base/strings/string_split.h"\n',
+        '#include "base/environment.h"\n#include "base/strings/string_number_conversions.h"\n#include "base/strings/string_split.h"\n',
         '#include "base/environment.h"',
         path,
     )
@@ -42,12 +42,39 @@ def apply(source_root: Path) -> None:
 
   // NAUTRIX_PRIORITY_PRECONNECT_BEGIN
   // Keep configured low-latency origins warm using Chromium's own partitioned
-  // PreconnectManager path. No HTTP request is issued here.
+  // PreconnectManager path. No HTTP request is issued here. The keep-alive is
+  // bounded and can be disabled from config/latency.ini via the launcher.
   {
     auto nautrix_environment = base::Environment::Create();
     const auto nautrix_origins =
         nautrix_environment->GetVar("NAUTRIX_PRECONNECT_ORIGINS");
     if (nautrix_origins.has_value() && IsPreconnectEnabled()) {
+      std::optional<net::ConnectionKeepAliveConfig> keepalive_config;
+      const auto keepalive_enabled =
+          nautrix_environment->GetVar("NAUTRIX_KEEPALIVE_ENABLED");
+      if (!keepalive_enabled.has_value() ||
+          (*keepalive_enabled != "0" && *keepalive_enabled != "false" &&
+           *keepalive_enabled != "off")) {
+        int idle_seconds = 120;
+        int ping_seconds = 25;
+        if (const auto value = nautrix_environment->GetVar(
+                "NAUTRIX_KEEPALIVE_IDLE_SECONDS")) {
+          base::StringToInt(*value, &idle_seconds);
+        }
+        if (const auto value = nautrix_environment->GetVar(
+                "NAUTRIX_KEEPALIVE_PING_SECONDS")) {
+          base::StringToInt(*value, &ping_seconds);
+        }
+        idle_seconds = std::max(30, std::min(idle_seconds, 600));
+        ping_seconds = std::max(0, std::min(ping_seconds, idle_seconds - 1));
+        net::ConnectionKeepAliveConfig config;
+        config.idle_timeout_in_seconds = idle_seconds;
+        config.ping_interval_in_seconds = ping_seconds;
+        config.enable_connection_keep_alive = true;
+        config.quic_connection_options = net::features::kQuicConnectionOptions.Get();
+        keepalive_config = std::move(config);
+      }
+
       for (const std::string& raw_url :
            base::SplitString(*nautrix_origins, ",", base::TRIM_WHITESPACE,
                              base::SPLIT_WANT_NONEMPTY)) {
@@ -68,7 +95,7 @@ def apply(source_root: Path) -> None:
             predictors::kLoadingPredictorPreconnectTrafficAnnotation,
             /*storage_partition_config=*/nullptr,
             network::GetNoOpNetworkRestrictionsId(),
-            /*keepalive_config=*/std::nullopt,
+            keepalive_config,
             mojo::PendingRemote<
                 network::mojom::ConnectionChangeObserverClient>());
       }
