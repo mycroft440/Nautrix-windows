@@ -96,6 +96,11 @@ std::vector<std::wstring> BuildInjectedArgs(const std::filesystem::path& latency
     SetEnv(L"NAUTRIX_NETWORK_PRIORITY_BOOST", ReadKey(latency_path, "enable_network_priority_boost", "1"));
     SetEnv(L"NAUTRIX_SELECTIVE_THROTTLING_BYPASS", ReadKey(latency_path, "enable_selective_throttling_bypass", "1"));
     SetEnv(L"NAUTRIX_INTENT_PRECONNECT", ReadKey(latency_path, "enable_intent_preconnect", "1"));
+    SetEnv(L"NAUTRIX_HIGH_RES_TIMER", ReadKey(latency_path, "enable_high_resolution_timer", "1"));
+    SetEnv(L"NAUTRIX_FREEZING_PROTECTION", ReadKey(latency_path, "enable_freezing_protection", "1"));
+    SetEnv(L"NAUTRIX_TRADING_PROCESS_PRIORITY", ReadKey(latency_path, "enable_trading_process_priority", "1"));
+    SetEnv(L"NAUTRIX_DISABLE_ECOQOS", ReadKey(latency_path, "disable_ecoqos_for_trading", "1"));
+    SetEnv(L"NAUTRIX_SPARE_RENDERER_WARMUP", ReadKey(latency_path, "enable_spare_renderer_warmup", "1"));
 
     std::vector<std::string> features;
     const std::string optimistic = ReadKey(latency_path, "optimistic_dns_for_tcp", "ab");
