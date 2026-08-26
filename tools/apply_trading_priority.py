@@ -29,7 +29,7 @@ def apply(source_root: Path) -> None:
     text = _insert_once(
         text,
         '#include "base/json/values_util.h"\n',
-        '#include "base/environment.h"\n#include "base/strings/string_split.h"\n',
+        '#include "base/environment.h"\n#include "base/strings/string_split.h"\n#include "base/strings/string_util.h"\n',
         '#include "base/environment.h"',
         path,
     )
@@ -42,29 +42,23 @@ namespace {
 base::Value::List GetNautrixTradingSites() {
   base::Value::List sites;
   auto environment = base::Environment::Create();
-  const auto raw_origins = environment->GetVar("NAUTRIX_PRECONNECT_ORIGINS");
-  if (!raw_origins.has_value() || raw_origins->empty()) {
+  const std::string mode =
+      environment->GetVar("NAUTRIX_TRADING_MODE").value_or("automatic");
+  if (base::EqualsCaseInsensitiveASCII(mode, "normal")) {
     return sites;
   }
 
-  for (std::string origin :
-       base::SplitString(*raw_origins, ",", base::TRIM_WHITESPACE,
+  const auto raw_sites = environment->GetVar("NAUTRIX_TRADING_SITES");
+  if (!raw_sites.has_value() || raw_sites->empty()) {
+    return sites;
+  }
+
+  for (std::string site :
+       base::SplitString(*raw_sites, ",", base::TRIM_WHITESPACE,
                          base::SPLIT_WANT_NONEMPTY)) {
-    const size_t scheme = origin.find("://");
-    if (scheme != std::string::npos) {
-      origin.erase(0, scheme + 3);
-    }
-    const size_t path_start = origin.find_first_of("/?#");
-    if (path_start != std::string::npos) {
-      origin.resize(path_start);
-    }
-    const size_t first_colon = origin.find(':');
-    if (first_colon != std::string::npos &&
-        origin.find(':', first_colon + 1) == std::string::npos) {
-      origin.resize(first_colon);
-    }
-    if (!origin.empty()) {
-      sites.Append(std::move(origin));
+    site = base::ToLowerASCII(site);
+    if (!site.empty()) {
+      sites.Append(std::move(site));
     }
   }
   return sites;
