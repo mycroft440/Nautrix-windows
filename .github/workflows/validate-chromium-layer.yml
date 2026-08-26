@@ -36,9 +36,13 @@ jobs:
         shell: pwsh
         run: python tools/validate_extended.py
 
-      - name: Validate downstream patches against pinned Chromium
+      - name: Validate DNS and preconnect patches against pinned Chromium
         shell: pwsh
         run: python tools/validate_upstream_dns_patch.py
+
+      - name: Validate trading priority patch against pinned Chromium
+        shell: pwsh
+        run: python tools/validate_upstream_trading_patch.py
 
       - name: Build native DNS/latency tools
         shell: cmd
