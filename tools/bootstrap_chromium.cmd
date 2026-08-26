@@ -73,5 +73,9 @@ echo [Nautrix] Applying priority-preconnect layer...
 python "%ROOT%\tools\apply_preconnect.py" "%SRC%"
 if errorlevel 1 exit /b 1
 
+echo [Nautrix] Applying per-site trading priority layer...
+python "%ROOT%\tools\apply_trading_priority.py" "%SRC%"
+if errorlevel 1 exit /b 1
+
 echo [Nautrix] Chromium source is ready.
 exit /b 0
