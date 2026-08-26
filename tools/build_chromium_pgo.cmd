@@ -25,7 +25,7 @@ if errorlevel 1 (
   popd
   exit /b 1
 )
-call autoninja -C out\NautrixPGO chrome
+call autoninja -C out\NautrixPGO chrome mini_installer
 if errorlevel 1 (
   popd
   exit /b 1
@@ -36,6 +36,12 @@ if not exist "%OUT%\chrome.exe" (
   echo [Nautrix] PGO build finished but chrome.exe was not found.
   exit /b 1
 )
+if not exist "%OUT%\mini_installer.exe" (
+  echo [Nautrix] PGO build finished but mini_installer.exe was not found.
+  exit /b 1
+)
 
-echo [Nautrix] PGO build completed: %OUT%\chrome.exe
+echo [Nautrix] PGO build completed successfully.
+echo [Nautrix] Browser: %OUT%\chrome.exe
+echo [Nautrix] Installer: %OUT%\mini_installer.exe
 exit /b 0

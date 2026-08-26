@@ -37,5 +37,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Nautrix-runtime-regression
-          path: ${{ env.LOCALAPPDATA }}\Nautrix\
+          path: ~/AppData/Local/Nautrix/
           if-no-files-found: warn

@@ -12,11 +12,6 @@ if errorlevel 1 exit /b 1
 
 set "PATH=%DEPOT%;%PATH%"
 set "DEPOT_TOOLS_WIN_TOOLCHAIN=0"
-
-rem Nautrix supports normal Google web authentication, but intentionally does
-rem not compile private Chrome/Chromium browser sign-in credentials. Clearing
-rem these prevents a developer machine environment from accidentally enabling
-rem restricted browser-level Google services such as Chrome Sync.
 set "GOOGLE_API_KEY="
 set "GOOGLE_DEFAULT_CLIENT_ID="
 set "GOOGLE_DEFAULT_CLIENT_SECRET="
@@ -34,8 +29,8 @@ if errorlevel 1 (
 )
 
 set "NINJA_SUMMARIZE_BUILD=1"
-echo [Nautrix] Building the Chromium browser target...
-call autoninja -C out\Nautrix chrome
+echo [Nautrix] Building browser and Windows installer...
+call autoninja -C out\Nautrix chrome mini_installer
 if errorlevel 1 (
   popd
   exit /b 1
@@ -46,7 +41,12 @@ if not exist "%OUT%\chrome.exe" (
   echo [Nautrix] Build finished but chrome.exe was not found.
   exit /b 1
 )
+if not exist "%OUT%\mini_installer.exe" (
+  echo [Nautrix] Build finished but mini_installer.exe was not found.
+  exit /b 1
+)
 
-echo [Nautrix] Build completed successfully.
-echo [Nautrix] Run: tools\run_nautrix.cmd
+echo [Nautrix] Baseline build completed successfully.
+echo [Nautrix] Browser: %OUT%\chrome.exe
+echo [Nautrix] Installer: %OUT%\mini_installer.exe
 exit /b 0

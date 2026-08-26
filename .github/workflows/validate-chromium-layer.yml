@@ -20,9 +20,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Compile Python tooling
+        shell: pwsh
+        run: python -m compileall -q tools
+
       - name: Validate Nautrix Chromium layer
         shell: pwsh
         run: python tools/validate_nautrix.py
+
+      - name: Validate extended DNS latency and PGO layer
+        shell: pwsh
+        run: python tools/validate_extended.py
 
       - name: Validate downstream patches against pinned Chromium
         shell: pwsh

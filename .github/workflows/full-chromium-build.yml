@@ -23,7 +23,7 @@ jobs:
       - name: Checkout Nautrix
         uses: actions/checkout@v5
 
-      - name: Build native network tools
+      - name: Build native tools
         shell: cmd
         run: tools\build_launcher.cmd
 
@@ -55,30 +55,21 @@ jobs:
           -Launcher "$PWD/.launcher-build/Release/NautrixLauncher.exe"
           -ConfigDir "$PWD/config"
 
-      - name: Package baseline
-        if: ${{ inputs.variant == 'baseline' }}
+      - name: Package deliverables
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force dist/Nautrix | Out-Null
-          Copy-Item -Recurse .chromium-work/src/out/Nautrix/* dist/Nautrix/
-          Copy-Item .launcher-build/Release/NautrixLauncher.exe dist/Nautrix/
-          Copy-Item .launcher-build/Release/NautrixNetworkSettings.exe dist/Nautrix/
-          Copy-Item -Recurse config dist/Nautrix/config
+          $out = if ('${{ inputs.variant }}' -eq 'pgo') { '.chromium-work/src/out/NautrixPGO' } else { '.chromium-work/src/out/Nautrix' }
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item "$out/mini_installer.exe" 'dist/NautrixSetup.exe'
+          Copy-Item '.launcher-build/Release/NautrixLauncher.exe' dist/
+          Copy-Item '.launcher-build/Release/NautrixNetworkSettings.exe' dist/
+          Copy-Item -Recurse config 'dist/config'
+          Copy-Item 'docs/RUNTIME_CHECKLIST.md' dist/
 
-      - name: Package PGO
-        if: ${{ inputs.variant == 'pgo' }}
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force dist/NautrixPGO | Out-Null
-          Copy-Item -Recurse .chromium-work/src/out/NautrixPGO/* dist/NautrixPGO/
-          Copy-Item .launcher-build/Release/NautrixLauncher.exe dist/NautrixPGO/
-          Copy-Item .launcher-build/Release/NautrixNetworkSettings.exe dist/NautrixPGO/
-          Copy-Item -Recurse config dist/NautrixPGO/config
-
-      - name: Upload browser
+      - name: Upload deliverables
         uses: actions/upload-artifact@v4
         with:
           name: Nautrix-${{ inputs.variant }}-x64
           path: dist/
-          compression-level: 1
+          compression-level: 6
           if-no-files-found: error
