@@ -23,7 +23,6 @@ set "DEPOT=%WORK%\depot_tools"
 set "SRC=%WORK%\src"
 
 if not exist "%WORK%" mkdir "%WORK%"
-
 where git >nul 2>&1
 if errorlevel 1 (
   echo [Nautrix] Git for Windows is required.
@@ -38,7 +37,6 @@ if not exist "%DEPOT%\.git" (
 
 set "PATH=%DEPOT%;%PATH%"
 set "DEPOT_TOOLS_WIN_TOOLCHAIN=0"
-
 echo [Nautrix] Chromium %VERSION% revision %REVISION%
 echo [Nautrix] Work tree: %WORK%
 
@@ -67,8 +65,12 @@ if not exist "%SRC%\chrome\BUILD.gn" (
   exit /b 1
 )
 
-echo [Nautrix] Applying the Nautrix downstream product layer...
+echo [Nautrix] Applying product/network layer...
 python "%ROOT%\tools\apply_nautrix.py" "%SRC%"
+if errorlevel 1 exit /b 1
+
+echo [Nautrix] Applying priority-preconnect layer...
+python "%ROOT%\tools\apply_preconnect.py" "%SRC%"
 if errorlevel 1 exit /b 1
 
 echo [Nautrix] Chromium source is ready.

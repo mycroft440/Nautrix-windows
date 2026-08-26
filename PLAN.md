@@ -1,35 +1,36 @@
 # Nautrix Windows — Development Plan
 
-## Objective
+## Execution order
 
-Build a full Windows browser focused on low latency and responsiveness while
-retaining normal modern-web compatibility.
+1. Stabilize/pin Chromium and keep lightweight CI green.
+2. Finish browser-local custom/automatic DNS and network-route scoring.
+3. Add IPv4/IPv6, real DoH-path measurement and diagnostics.
+4. Add controlled Chromium pre-resolve/preconnect for priority sites.
+5. Instrument startup/network/input/runtime performance and establish regression tests.
+6. Add PGO build path and compare it against the baseline build.
+7. Build the complete Chromium-derived Nautrix on a capable Windows runner.
+8. Run browser/runtime compatibility tests (Google login, extensions, sessions, normal browser features).
+9. Only after measurements, keep/tune optimizations that measurably reduce latency.
 
-## Architecture decision
+## Architecture
 
-- [x] C++/Chromium native Windows browser base.
-- [x] WebView2 foundation superseded.
-- [x] No CEF/Electron embedded-browser layer.
-- [x] Chromium version pinned for reproducibility.
-- [x] Nautrix product layer kept separately from the huge upstream source tree.
+- [x] C++ / full Chromium native Windows browser base.
+- [x] WebView2/CEF/Electron excluded.
+- [x] Chromium Stable version/revision pinned.
+- [x] Nautrix downstream product/network layer kept separately from the huge upstream source tree.
+- [x] Chromium end-user optimization baseline (`is_official_build=true`).
+- [x] Google Chrome branding/private browser OAuth credentials disabled.
 
-## Chromium foundation
+## Browser foundation
 
-- [x] Pin current Windows Stable Chromium release and git revision.
-- [x] Add official depot_tools/gclient bootstrap flow.
-- [x] Add GN Release x64 configuration.
-- [x] Use Chromium end-user optimization level (`is_official_build=true`).
-- [x] Keep Chrome branding/private browser-level Google credentials disabled.
-- [x] Add Nautrix branding/product identity patch layer.
-- [x] Give Nautrix its own Windows product/profile path.
-- [x] Add lightweight CI validation for the downstream layer.
-- [ ] Complete a full Chromium x64 build on a machine meeting upstream requirements.
-- [ ] Launch and interactively validate the produced browser.
+- [x] depot_tools/gclient bootstrap flow.
+- [x] GN + autoninja Windows x64 build flow.
+- [x] Nautrix branding and Windows product/profile identity.
+- [x] CI validates downstream layer and exact pinned upstream patch anchors.
+- [ ] Full Chromium x64 build on a runner/workstation meeting upstream disk/RAM requirements.
+- [ ] Interactive runtime validation of the produced browser.
 
-## Baseline browser functionality inherited from Chromium
-
-The Chromium base provides the implementation for these features; each remains
-pending until the first full Nautrix build is interactively verified.
+## Browser functionality inherited from Chromium — runtime gates
 
 - [ ] Tabs / multiple windows.
 - [ ] Address bar and search.
@@ -40,69 +41,64 @@ pending until the first full Nautrix build is interactively verified.
 - [ ] Password/autofill facilities available in open Chromium.
 - [ ] Site permissions.
 - [ ] DevTools.
-- [ ] Extensions support / Chrome Web Store compatibility validation.
-- [ ] WebRTC / WebGL / WebGPU according to the selected Chromium build.
+- [ ] Extensions and Chrome Web Store compatibility.
+- [ ] WebRTC / WebGL / WebGPU.
 - [ ] PWA support.
 
-## Google authentication compatibility
+## Google web authentication — runtime gates
 
-- [x] Remove embedded WebView architecture that Google explicitly restricts.
-- [x] Use standalone Chromium browser architecture.
-- [ ] Test `accounts.google.com` interactively.
-- [ ] Test Gmail/YouTube Google account sessions.
-- [ ] Test third-party "Continue with Google" OAuth/FedCM flow.
-- [ ] Test 2FA and WebAuthn/passkeys.
-- [ ] Verify sessions survive browser restart.
+- [x] Standalone Chromium architecture instead of embedded user-agent.
+- [ ] `accounts.google.com` interactive sign-in.
+- [ ] Gmail/YouTube session.
+- [ ] Third-party Continue with Google OAuth/FedCM.
+- [ ] 2FA and WebAuthn/passkeys.
+- [ ] Session persistence after restart.
 
-Official Chrome Sync is not an implementation target because Google restricts
-the private Chrome services used by third-party Chromium-derived browsers.
+Official Chrome Sync remains outside the implementation target because Google restricts the private Chrome services used by third-party Chromium-derived browsers.
 
-## Custom and automatic DNS
+## Custom/automatic DNS
 
-- [x] Keep DNS overrides browser-local instead of modifying Windows globally.
-- [x] Add native Windows DNS/latency launcher.
-- [x] Add `system`, `manual` and `automatic` DNS modes.
-- [x] Support custom nameservers and custom DoH template.
-- [x] Benchmark real DNS queries rather than ICMP ping.
-- [x] Track median, p95, jitter, timeout and failure rate.
-- [x] Benchmark configured resolvers in parallel.
-- [x] Cache the winner per network signature.
-- [x] Re-test after active adapter/address/system-DNS changes.
-- [x] Add hysteresis before switching resolver.
-- [x] Patch Chromium Network Service to use `DnsConfigOverrides`.
-- [x] Keep Chromium Secure DNS/DoH available for the selected resolver.
-- [x] Validate the DNS patch automatically against the exact pinned Chromium
-      `network_service.cc` in hosted CI.
-- [x] Add priority-host DNS-route scoring using resolver answers + TCP/443
-      connection setup for important/trading sites.
-- [ ] Validate the DNS override against the first full Chromium runtime build.
-- [ ] Measure the actual DoH HTTPS path through Chromium NetLog.
-- [ ] Add settings UI for DNS mode/providers/metrics.
-- [ ] Extend priority-host scoring to Chromium TLS/QUIC/first-byte telemetry.
+- [x] Browser-local override; does not silently modify Windows DNS.
+- [x] Native Windows launcher.
+- [x] `system`, `manual`, and `automatic` modes.
+- [x] Custom nameservers and custom DoH endpoint.
+- [x] Real DNS query benchmark instead of ICMP ping.
+- [x] Median, p95, jitter, timeout/failure scoring.
+- [x] Parallel provider benchmark.
+- [x] Winner cache per network signature.
+- [x] Retest after active adapter/address/system-DNS changes.
+- [x] Hysteresis before resolver switching.
+- [x] Chromium Network Service `DnsConfigOverrides` integration.
+- [x] DoH/Secure DNS retained for selected resolver.
+- [x] Exact pinned Chromium `network_service.cc` patch validation in CI.
+- [x] Priority-host DNS-answer + TCP/443 route score.
+- [x] A + AAAA queries and separate IPv4/IPv6 route measurements.
+- [x] Direct DoH HTTPS-path measurement in the selector.
+- [x] CSV metrics output.
+- [x] Native Win32 DNS settings/benchmark application.
+- [ ] Validate overrides and DoH using the first full Chromium runtime + NetLog.
 
 ## Performance / low latency
 
-- [x] Production Chromium optimization level enabled.
-- [x] Preserve Chromium browser/network/GPU/renderer process isolation.
-- [x] Keep QUIC, DNS cache and connection pooling enabled by default.
-- [x] Add A/B-configurable Happy Eyeballs V3 launch profile.
-- [x] Keep DNS/provider benchmarks off the renderer/DOM path.
-- [x] Add configured priority/trading-host TCP/443 route scoring to DNS selection.
-- [ ] Add Chromium-level TLS/QUIC/first-byte priority-host scoring.
-- [ ] Instrument cold and warm startup.
-- [ ] Instrument input-to-browser-process latency.
-- [ ] Instrument page/navigation timing.
-- [ ] Instrument DNS, TCP/QUIC connect, TLS, first-byte, RTT and jitter separately.
-- [ ] Profile CPU/RAM/GPU process behavior.
-- [ ] Add controlled pre-resolve/preconnect for priority hosts using Chromium's
-      existing prediction/preconnect machinery.
-- [ ] Establish a performance regression suite before aggressive tuning.
-- [ ] Benchmark Chromium PGO against the validated baseline.
-- [ ] Keep future latency-critical trading/API/order work outside renderer/DOM paths.
+- [x] Chromium production optimization level.
+- [x] Preserve browser/network/GPU/renderer process isolation.
+- [x] Keep QUIC/HTTP3, DNS cache, socket pooling and GPU enabled by default.
+- [x] Configurable Happy Eyeballs V3.
+- [x] DNS/route benchmarking outside renderer/DOM paths.
+- [x] Priority-host TCP/443 IPv4/IPv6 measurements.
+- [x] NetLog capture on demand, disabled by default.
+- [x] Startup trace on demand, disabled by default.
+- [x] Browser process creation timing log.
+- [x] Configurable non-realtime browser root process priority.
+- [x] Priority preconnect configuration exported to Chromium.
+- [ ] Patch Chromium preconnect manager path for Nautrix priority origins and validate against pinned upstream source.
+- [ ] Add automated runtime resource profiler (CPU/RAM/process tree).
+- [ ] Add headless navigation/startup regression suite.
+- [ ] Add NetLog summarizer for DNS/connect/TLS/QUIC/request timings.
+- [ ] Add baseline vs PGO benchmark workflow/scripts.
+- [ ] Add full Chromium PGO build path.
+- [ ] Validate cold/warm start, page/navigation, input-to-frame, DNS/TCP/TLS/QUIC/TTFB and CPU/RAM/GPU on actual Nautrix binary.
 
-## Next objective
+## Final hard gate
 
-Keep the native DNS/latency launcher green in Windows CI, then complete the
-first full Chromium-based Nautrix x64 build. Runtime validation will cover
-normal navigation, Google web login, custom/automatic DNS and the first latency
-benchmarks before more aggressive network tuning.
+The final items require a complete Chromium checkout/build and interactive Windows runtime. Hosted lightweight CI cannot truthfully mark those runtime gates complete. The repository must provide an automated self-hosted build/test path so the remaining gates run as soon as a capable Windows runner is attached.

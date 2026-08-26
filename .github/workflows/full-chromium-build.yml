@@ -1,0 +1,84 @@
+name: Full Chromium Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: Build variant
+        required: true
+        default: baseline
+        type: choice
+        options:
+          - baseline
+          - pgo
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: [self-hosted, Windows, X64, nautrix-chromium]
+    timeout-minutes: 720
+    steps:
+      - name: Checkout Nautrix
+        uses: actions/checkout@v5
+
+      - name: Build native network tools
+        shell: cmd
+        run: tools\build_launcher.cmd
+
+      - name: Build Chromium baseline
+        if: ${{ inputs.variant == 'baseline' }}
+        shell: cmd
+        run: tools\build_chromium.cmd
+
+      - name: Build Chromium PGO
+        if: ${{ inputs.variant == 'pgo' }}
+        shell: cmd
+        run: tools\build_chromium_pgo.cmd
+
+      - name: Runtime smoke baseline
+        if: ${{ inputs.variant == 'baseline' }}
+        shell: pwsh
+        run: >-
+          ./tools/runtime_smoke.ps1
+          -Browser "$PWD/.chromium-work/src/out/Nautrix/chrome.exe"
+          -Launcher "$PWD/.launcher-build/Release/NautrixLauncher.exe"
+          -ConfigDir "$PWD/config"
+
+      - name: Runtime smoke PGO
+        if: ${{ inputs.variant == 'pgo' }}
+        shell: pwsh
+        run: >-
+          ./tools/runtime_smoke.ps1
+          -Browser "$PWD/.chromium-work/src/out/NautrixPGO/chrome.exe"
+          -Launcher "$PWD/.launcher-build/Release/NautrixLauncher.exe"
+          -ConfigDir "$PWD/config"
+
+      - name: Package baseline
+        if: ${{ inputs.variant == 'baseline' }}
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist/Nautrix | Out-Null
+          Copy-Item -Recurse .chromium-work/src/out/Nautrix/* dist/Nautrix/
+          Copy-Item .launcher-build/Release/NautrixLauncher.exe dist/Nautrix/
+          Copy-Item .launcher-build/Release/NautrixNetworkSettings.exe dist/Nautrix/
+          Copy-Item -Recurse config dist/Nautrix/config
+
+      - name: Package PGO
+        if: ${{ inputs.variant == 'pgo' }}
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist/NautrixPGO | Out-Null
+          Copy-Item -Recurse .chromium-work/src/out/NautrixPGO/* dist/NautrixPGO/
+          Copy-Item .launcher-build/Release/NautrixLauncher.exe dist/NautrixPGO/
+          Copy-Item .launcher-build/Release/NautrixNetworkSettings.exe dist/NautrixPGO/
+          Copy-Item -Recurse config dist/NautrixPGO/config
+
+      - name: Upload browser
+        uses: actions/upload-artifact@v4
+        with:
+          name: Nautrix-${{ inputs.variant }}-x64
+          path: dist/
+          compression-level: 1
+          if-no-files-found: error

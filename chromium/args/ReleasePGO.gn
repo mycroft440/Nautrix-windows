@@ -1,0 +1,9 @@
+# Nautrix Windows PGO build. Same product settings as baseline, with Chromium PGO enabled.
+is_official_build = true
+is_component_build = false
+target_cpu = "x64"
+chrome_pgo_phase = 2
+symbol_level = 0
+blink_symbol_level = 0
+v8_symbol_level = 0
+is_chrome_branded = false

@@ -1,129 +1,55 @@
-# Nautrix DNS and low-latency networking
+# Nautrix DNS and low-latency network layer
 
-## Goals
+## Modes
 
-Nautrix keeps DNS selection browser-local. It does not modify the Windows DNS
-configuration unless a future explicit user-facing option is added.
+`config/dns.ini` supports `automatic`, `manual`, and `system` DNS. The resolver override is browser-local: Nautrix passes the selected configuration to Chromium's Network Service instead of silently modifying Windows DNS.
 
-The networking work has two separate goals:
+Automatic mode benchmarks the configured resolver endpoints in parallel and scores real DNS query latency, p95 tail latency, jitter, failures, encrypted DoH path latency, and TCP/443 connection time for priority hosts. Both A and AAAA records are sampled so IPv4 and IPv6 routes are compared.
 
-1. reduce avoidable DNS/connection setup delay;
-2. keep latency-sensitive sites stable instead of chasing a one-off low sample.
+## Trading/priority hosts
 
-No optimization is considered successful until it is benchmarked on the
-finished Chromium binary.
+`priority_hosts` controls hosts whose resolver answers are followed by TCP/443 connection measurements. `preconnect_origins` in `config/latency.ini` controls origins kept warm through Chromium's own preconnect machinery. The default profile includes the MEXC website/API hosts, but the lists are editable.
 
-## DNS modes
+The score deliberately does not assume the resolver with the smallest DNS RTT gives the fastest site path. A resolver can answer faster while returning a worse CDN/edge route.
 
-`config/dns.ini` supports:
+## DoH
 
-- `mode=system` — use Chromium/Windows network configuration unchanged.
-- `mode=manual` — use `manual_nameservers` and, when enabled, the custom DoH
-  template.
-- `mode=automatic` — benchmark configured providers and select a stable winner.
+When `prefer_encrypted=1`, automatic mode also measures each provider's DoH HTTPS endpoint. Chromium receives the selected nameservers and DoH template through `DnsConfigOverrides`. If Secure DNS is unavailable in automatic mode, the chosen plain resolver remains the controlled fallback.
 
-The native launcher passes the selected configuration through inherited process
-environment variables. The Nautrix Chromium downstream layer reads those values
-inside the Network Service and applies them with Chromium's
-`net::DnsConfigOverrides`.
+## Stability
 
-This preserves Chromium's DNS cache, connection pooling, Secure DNS machinery
-and network process isolation.
+The automatic winner is cached per network signature. The signature includes active adapters, addresses, and system DNS servers. A change in those values forces a fresh selection. A time-based retest and minimum-improvement hysteresis prevent needless resolver flapping.
 
-## Automatic selection
+## Diagnostics
 
-The launcher sends real DNS A queries directly to every configured resolver.
-ICMP ping is not used as the selection metric.
+The launcher writes:
 
-For every candidate it records:
+- `%LOCALAPPDATA%\Nautrix\dns-metrics.csv`
+- `%LOCALAPPDATA%\Nautrix\dns-selection.state`
+- `%LOCALAPPDATA%\Nautrix\launch-metrics.log`
 
-- median query latency;
-- p95 query latency;
-- jitter;
-- timeout/failure rate.
+Use `--force-dns-retest` to ignore the cached winner. Use `--benchmark-only` to benchmark/select DNS without launching Chromium.
 
-The score adds penalties for tail latency, jitter and failures. Providers are
-benchmarked in parallel so the startup test does not scale linearly with the
-number of candidates.
+NetLog and startup tracing stay disabled during normal browsing. For a diagnostic launch:
 
-The selected resolver is cached under `%LOCALAPPDATA%\Nautrix`. The cache is
-invalidated when the active network signature changes. The signature includes
-active adapters, addresses and system DNS servers, so switching Ethernet,
-Wi-Fi, VPN or addressing normally triggers a fresh selection.
+```bat
+tools\run_nautrix.cmd --nautrix-netlog --nautrix-trace
+```
 
-`minimum_improvement_percent` adds hysteresis: an existing resolver remains in
-use unless the challenger is meaningfully better. This prevents resolver
-thrashing from tiny or temporary differences.
+The resulting files are stored below `%LOCALAPPDATA%\Nautrix\NetLog` and `%LOCALAPPDATA%\Nautrix\Traces`.
 
-## Encrypted DNS
+## Settings UI
 
-When `prefer_encrypted=1` and the selected provider has a DoH template, Nautrix
-uses Chromium Secure DNS in automatic mode with that provider, retaining the
-selected plain resolver as fallback for resilience. The initial automatic score
-is currently measured with direct UDP DNS queries to the provider IPs. That
-gives a reliable local resolver-latency baseline, but it is not yet a
-measurement of the full HTTPS/DoH path.
+Run:
 
-After the first full Chromium runtime build, a later benchmark will use
-Chromium NetLog/metrics to compare the actual encrypted resolution path before
-we tune the score further.
+```bat
+tools\network_settings.cmd
+```
 
-## Trading / priority sites
+The native Win32 settings application exposes Automatic/Manual/System DNS, manual nameservers, custom DoH, encrypted-DNS preference, a one-click benchmark, and the latest provider metrics.
 
-A low DNS number is only one part of end-to-end site latency. A resolver can
-answer quickly but return a CDN route that is worse for a specific trading
-site. Therefore DNS latency, TCP/QUIC connection setup, TLS, network RTT/jitter,
-server response time and rendering/input latency are tracked as separate
-metrics.
+## Low-latency defaults
 
-`probe_domains` can include the domains that matter most to the user.
+Nautrix preserves Chromium's QUIC/HTTP3, DNS cache, socket pooling, GPU process, Network Service, and renderer isolation. Happy Eyeballs V3 and controlled priority-origin preconnect are enabled in the Nautrix profile. The root browser process starts at `ABOVE_NORMAL_PRIORITY_CLASS`; real-time priority is intentionally not used.
 
-`priority_hosts` is already used by the automatic selector. For every candidate
-resolver, Nautrix resolves each priority host through that resolver, extracts
-the returned IPv4 addresses, measures TCP/443 connection setup and adds that
-route latency/failure signal to the resolver score. This prevents a DNS from
-winning solely because it answers quickly while returning a worse CDN/edge
-route for an important trading site.
-
-This TCP connect probe is intentionally not described as full end-to-end
-browser latency: TLS, HTTP/2 or HTTP/3/QUIC, first byte and application/server
-processing are measured separately in later runtime stages.
-
-## Happy Eyeballs V3
-
-`config/latency.ini` exposes `enable_happy_eyeballs_v3`.
-
-When enabled, the launcher adds Chromium's `HappyEyeballsV3` feature. This
-allows connection attempts to make use of intermediate DNS results sooner.
-It remains an A/B benchmarkable switch because network topology determines
-whether it improves a particular machine.
-
-## Rules for low-latency tuning
-
-Nautrix deliberately does not apply generic registry/network "tweaks" without
-measurement.
-
-In particular:
-
-- do not disable QUIC by default;
-- do not disable DNS/browser caches;
-- do not disable connection pooling;
-- do not collapse Chromium's browser/network/GPU/renderer process isolation;
-- do not put future trading API/order work in a renderer or DOM path;
-- prefer warm connections and preconnect for explicitly configured priority
-  hosts after runtime validation;
-- benchmark cold start, warm start, DNS, connect, TLS, first byte, input,
-  rendering and any future trading-order dispatch separately.
-
-## Next networking stages
-
-1. Full Chromium x64 runtime build.
-2. Validate browser-local custom DNS and Secure DNS.
-3. Capture NetLog for selected providers.
-4. Extend priority-host scoring from DNS + TCP/443 to TLS/QUIC/first-byte
-   measurements captured from the real Chromium network stack.
-5. Add controlled pre-resolve/preconnect for configured priority sites using
-   Chromium's existing loading predictor/preconnect facilities.
-6. Benchmark Happy Eyeballs V3 on/off.
-7. Enable Chromium PGO only after a stable baseline exists.
-8. Maintain performance-regression gates on Chromium upgrades.
+Every non-default performance feature is configured separately so it can be A/B tested instead of becoming an unmeasured permanent tweak.

@@ -11,9 +11,13 @@ cmake --build "%BUILD%" --config Release --parallel
 if errorlevel 1 exit /b 1
 
 if not exist "%BUILD%\Release\NautrixLauncher.exe" (
-  echo [Nautrix] Launcher build completed but NautrixLauncher.exe was not found.
+  echo [Nautrix] NautrixLauncher.exe was not produced.
+  exit /b 1
+)
+if not exist "%BUILD%\Release\NautrixNetworkSettings.exe" (
+  echo [Nautrix] NautrixNetworkSettings.exe was not produced.
   exit /b 1
 )
 
-echo [Nautrix] Launcher built: %BUILD%\Release\NautrixLauncher.exe
+echo [Nautrix] Native tools built successfully.
 exit /b 0

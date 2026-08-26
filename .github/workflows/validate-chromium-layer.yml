@@ -24,17 +24,21 @@ jobs:
         shell: pwsh
         run: python tools/validate_nautrix.py
 
-      - name: Validate DNS patch against pinned Chromium
+      - name: Validate downstream patches against pinned Chromium
         shell: pwsh
         run: python tools/validate_upstream_dns_patch.py
 
-      - name: Build native DNS/latency launcher
+      - name: Build native DNS/latency tools
         shell: cmd
         run: tools\build_launcher.cmd
 
-      - name: Upload launcher
+      - name: Upload native tools
         uses: actions/upload-artifact@v4
         with:
-          name: NautrixLauncher-x64
-          path: .launcher-build/Release/NautrixLauncher.exe
+          name: NautrixNetworkTools-x64
+          path: |
+            .launcher-build/Release/NautrixLauncher.exe
+            .launcher-build/Release/NautrixNetworkSettings.exe
+            config/dns.ini
+            config/latency.ini
           if-no-files-found: error

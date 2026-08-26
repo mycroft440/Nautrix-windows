@@ -2,72 +2,47 @@
 
 ## Requirements
 
-The upstream Chromium Windows build currently requires:
+A full Chromium Windows checkout/build needs a capable x64 Windows machine, Visual Studio with Desktop C++/ATL/MFC components, NTFS storage, substantial free disk space (plan for 100+ GB), and preferably more than 16 GB RAM.
 
-- Windows 10 or newer, x86-64.
-- Visual Studio 2026 (18.0 or newer) with **Desktop development with C++**.
-- MFC/ATL support components.
-- NTFS storage.
-- At least 100 GB free disk space for the checkout/build.
-- More than 16 GB RAM is strongly recommended.
+The repository intentionally keeps hosted CI lightweight; full builds are executed on a workstation or self-hosted runner.
 
-The Nautrix scripts use Chromium's official `depot_tools`, `gclient`, GN and
-`autoninja` flow.
-
-## Checkout
-
-From a normal `cmd.exe`:
+## Baseline build
 
 ```bat
 tools\bootstrap_chromium.cmd
-```
-
-This clones `depot_tools`, obtains Chromium, synchronizes the exact revision
-pinned in `chromium/VERSION`, and applies Nautrix product branding/integration.
-
-The source tree is stored in:
-
-```text
-.chromium-work\src
-```
-
-It is intentionally ignored by Git.
-
-## Build
-
-```bat
 tools\build_chromium.cmd
 ```
 
-The production baseline uses:
+The source tree is stored under `.chromium-work\src`, and the baseline output under `.chromium-work\src\out\Nautrix`.
 
-```text
-.chromium-work\src\out\Nautrix
-```
-
-After a successful build:
+Build/run native network tools:
 
 ```bat
+tools\build_launcher.cmd
+tools\network_settings.cmd
 tools\run_nautrix.cmd
 ```
 
-To open Google's account page specifically for interactive compatibility
-testing:
+## Diagnostic launch
 
 ```bat
-tools\test_google_login.cmd
+tools\run_nautrix.cmd --nautrix-netlog --nautrix-trace
 ```
 
-## Why hosted CI does not compile Chromium
+This keeps profiling overhead out of normal browsing and writes diagnostics below `%LOCALAPPDATA%\Nautrix`.
 
-A standard GitHub-hosted Windows runner does not provide the storage footprint
-needed for a complete Chromium checkout/build. The repository CI therefore
-validates the pinned version, GN configuration and the Nautrix downstream patch
-layer. A full binary build should run on a capable Windows workstation or a
-self-hosted runner with the required disk/RAM.
+## PGO
 
-## Important distinction
+The baseline build intentionally uses `chrome_pgo_phase=0` so it can be compared against a separate PGO build. The PGO scripts/workflow enable Chromium's profile checkout and use a dedicated output directory; never infer a performance gain until the two builds have been measured on the same machine/network workload.
 
-Nautrix is built with open Chromium branding mode (`is_chrome_branded=false`).
-The downstream patch changes Nautrix's own product identity; it does not attempt
-to impersonate Google Chrome or enable private Google Chrome services.
+## Full runtime gates
+
+After the first complete browser build, execute the runtime scripts and interactive checklist for:
+
+- normal navigation/search/tabs/downloads/history/profiles
+- Chrome extension platform / Chrome Web Store compatibility
+- `accounts.google.com`, Gmail/YouTube, Continue with Google, 2FA/passkeys and session persistence
+- automatic/manual DNS + DoH behavior in NetLog
+- cold/warm startup, navigation, CPU/RAM/process behavior and network timings
+
+The browser remains open Chromium branding (`is_chrome_branded=false`) and does not impersonate Google Chrome or enable private Chrome Sync services.
