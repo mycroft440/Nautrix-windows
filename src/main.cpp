@@ -6,9 +6,10 @@
 #include <algorithm>
 #include <filesystem>
 #include <iomanip>
+#include <iterator>
 #include <sstream>
 #include <string>
-#include <string_view>
+#include <system_error>
 
 using Microsoft::WRL::Callback;
 using Microsoft::WRL::ComPtr;
@@ -38,13 +39,29 @@ std::string UrlEncodeUtf8(const std::wstring& input) {
         return {};
     }
 
-    const int size = WideCharToMultiByte(CP_UTF8, 0, input.c_str(), static_cast<int>(input.size()), nullptr, 0, nullptr, nullptr);
+    const int size = WideCharToMultiByte(
+        CP_UTF8,
+        0,
+        input.c_str(),
+        static_cast<int>(input.size()),
+        nullptr,
+        0,
+        nullptr,
+        nullptr);
     if (size <= 0) {
         return {};
     }
 
     std::string utf8(static_cast<size_t>(size), '\0');
-    WideCharToMultiByte(CP_UTF8, 0, input.c_str(), static_cast<int>(input.size()), utf8.data(), size, nullptr, nullptr);
+    WideCharToMultiByte(
+        CP_UTF8,
+        0,
+        input.c_str(),
+        static_cast<int>(input.size()),
+        utf8.data(),
+        size,
+        nullptr,
+        nullptr);
 
     std::ostringstream encoded;
     encoded << std::uppercase << std::hex;
@@ -76,7 +93,9 @@ std::wstring NormalizeNavigationInput(std::wstring input) {
         return input;
     }
 
-    const bool looksLikeHost = input.find(L' ') == std::wstring::npos && input.find(L'.') != std::wstring::npos;
+    const bool looksLikeHost =
+        input.find(L' ') == std::wstring::npos &&
+        (input.find(L'.') != std::wstring::npos || input.rfind(L"localhost", 0) == 0);
     if (looksLikeHost) {
         return L"https://" + input;
     }
@@ -93,6 +112,7 @@ std::wstring GetWebViewUserDataFolder() {
         result = localAppData;
         CoTaskMemFree(localAppData);
         result += L"\\Nautrix\\WebView2";
+
         std::error_code error;
         std::filesystem::create_directories(result, error);
     }
@@ -157,7 +177,8 @@ private:
             self = reinterpret_cast<BrowserWindow*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
         }
 
-        return self ? self->HandleMessage(message, wParam, lParam) : DefWindowProcW(hwnd, message, wParam, lParam);
+        return self ? self->HandleMessage(message, wParam, lParam)
+                    : DefWindowProcW(hwnd, message, wParam, lParam);
     }
 
     static LRESULT CALLBACK AddressBarProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
@@ -186,8 +207,16 @@ private:
 
         case WM_DPICHANGED: {
             const auto* rect = reinterpret_cast<RECT*>(lParam);
-            SetWindowPos(hwnd_, nullptr, rect->left, rect->top, rect->right - rect->left, rect->bottom - rect->top,
-                         SWP_NOZORDER | SWP_NOACTIVATE);
+            if (rect) {
+                SetWindowPos(
+                    hwnd_,
+                    nullptr,
+                    rect->left,
+                    rect->top,
+                    rect->right - rect->left,
+                    rect->bottom - rect->top,
+                    SWP_NOZORDER | SWP_NOACTIVATE);
+            }
             Layout();
             return 0;
         }
@@ -198,8 +227,12 @@ private:
 
         case WM_DESTROY:
             if (addressBar_ && addressBarOriginalProc_) {
-                SetWindowLongPtrW(addressBar_, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(addressBarOriginalProc_));
+                SetWindowLongPtrW(
+                    addressBar_,
+                    GWLP_WNDPROC,
+                    reinterpret_cast<LONG_PTR>(addressBarOriginalProc_));
             }
+
             webView_.Reset();
             if (controller_) {
                 controller_->Close();
@@ -220,26 +253,87 @@ private:
 
     void CreateToolbar() {
         const HINSTANCE instance = reinterpret_cast<HINSTANCE>(GetWindowLongPtrW(hwnd_, GWLP_HINSTANCE));
-        backButton_ = CreateWindowExW(0, L"BUTTON", L"<-", WS_CHILD | WS_VISIBLE | WS_TABSTOP,
-                                      0, 0, 0, 0, hwnd_, reinterpret_cast<HMENU>(kButtonBack), instance, nullptr);
-        forwardButton_ = CreateWindowExW(0, L"BUTTON", L"->", WS_CHILD | WS_VISIBLE | WS_TABSTOP,
-                                         0, 0, 0, 0, hwnd_, reinterpret_cast<HMENU>(kButtonForward), instance, nullptr);
-        reloadButton_ = CreateWindowExW(0, L"BUTTON", L"Reload", WS_CHILD | WS_VISIBLE | WS_TABSTOP,
-                                        0, 0, 0, 0, hwnd_, reinterpret_cast<HMENU>(kButtonReload), instance, nullptr);
-        addressBar_ = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", kHomeUrl,
-                                      WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL,
-                                      0, 0, 0, 0, hwnd_, reinterpret_cast<HMENU>(kAddressBar), instance, nullptr);
-        goButton_ = CreateWindowExW(0, L"BUTTON", L"Go", WS_CHILD | WS_VISIBLE | WS_TABSTOP,
-                                    0, 0, 0, 0, hwnd_, reinterpret_cast<HMENU>(kButtonGo), instance, nullptr);
+        backButton_ = CreateWindowExW(
+            0,
+            L"BUTTON",
+            L"<-",
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+            0,
+            0,
+            0,
+            0,
+            hwnd_,
+            reinterpret_cast<HMENU>(static_cast<INT_PTR>(kButtonBack)),
+            instance,
+            nullptr);
+        forwardButton_ = CreateWindowExW(
+            0,
+            L"BUTTON",
+            L"->",
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+            0,
+            0,
+            0,
+            0,
+            hwnd_,
+            reinterpret_cast<HMENU>(static_cast<INT_PTR>(kButtonForward)),
+            instance,
+            nullptr);
+        reloadButton_ = CreateWindowExW(
+            0,
+            L"BUTTON",
+            L"Reload",
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+            0,
+            0,
+            0,
+            0,
+            hwnd_,
+            reinterpret_cast<HMENU>(static_cast<INT_PTR>(kButtonReload)),
+            instance,
+            nullptr);
+        addressBar_ = CreateWindowExW(
+            WS_EX_CLIENTEDGE,
+            L"EDIT",
+            kHomeUrl,
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL,
+            0,
+            0,
+            0,
+            0,
+            hwnd_,
+            reinterpret_cast<HMENU>(static_cast<INT_PTR>(kAddressBar)),
+            instance,
+            nullptr);
+        goButton_ = CreateWindowExW(
+            0,
+            L"BUTTON",
+            L"Go",
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+            0,
+            0,
+            0,
+            0,
+            hwnd_,
+            reinterpret_cast<HMENU>(static_cast<INT_PTR>(kButtonGo)),
+            instance,
+            nullptr);
 
         const HFONT font = static_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
         for (HWND control : {backButton_, forwardButton_, reloadButton_, addressBar_, goButton_}) {
-            SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
+            if (control) {
+                SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
+            }
         }
 
-        SetWindowLongPtrW(addressBar_, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
-        addressBarOriginalProc_ = reinterpret_cast<WNDPROC>(
-            SetWindowLongPtrW(addressBar_, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&BrowserWindow::AddressBarProc)));
+        if (addressBar_) {
+            SetWindowLongPtrW(addressBar_, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
+            addressBarOriginalProc_ = reinterpret_cast<WNDPROC>(
+                SetWindowLongPtrW(
+                    addressBar_,
+                    GWLP_WNDPROC,
+                    reinterpret_cast<LONG_PTR>(&BrowserWindow::AddressBarProc)));
+        }
 
         EnableWindow(backButton_, FALSE);
         EnableWindow(forwardButton_, FALSE);
@@ -271,13 +365,13 @@ private:
         MoveWindow(reloadButton_, x, y, reloadWidth, controlHeight, TRUE);
         x += reloadWidth + gap;
 
-        const int available = std::max(Scale(120), client.right - x - goWidth - gap - margin);
+        const int available = std::max(0, client.right - x - goWidth - gap - margin);
         MoveWindow(addressBar_, x, y, available, controlHeight, TRUE);
         x += available + gap;
         MoveWindow(goButton_, x, y, goWidth, controlHeight, TRUE);
 
         if (controller_) {
-            RECT webBounds{0, toolbarHeight, client.right, client.bottom};
+            RECT webBounds{0, toolbarHeight, std::max(0L, client.right), std::max(static_cast<LONG>(toolbarHeight), client.bottom)};
             controller_->put_Bounds(webBounds);
         }
     }
@@ -304,8 +398,10 @@ private:
             NavigateFromAddressBar();
             break;
         case kCommandFocusAddress:
-            SetFocus(addressBar_);
-            SendMessageW(addressBar_, EM_SETSEL, 0, -1);
+            if (addressBar_) {
+                SetFocus(addressBar_);
+                SendMessageW(addressBar_, EM_SETSEL, 0, -1);
+            }
             break;
         default:
             break;
@@ -318,10 +414,16 @@ private:
         }
 
         const int length = GetWindowTextLengthW(addressBar_);
-        std::wstring text(static_cast<size_t>(length), L'\0');
-        if (length > 0) {
-            GetWindowTextW(addressBar_, text.data(), length + 1);
+        if (length < 0) {
+            return;
         }
+
+        std::wstring text(static_cast<size_t>(length) + 1, L'\0');
+        const int copied = GetWindowTextW(addressBar_, text.data(), length + 1);
+        if (copied < 0) {
+            return;
+        }
+        text.resize(static_cast<size_t>(copied));
 
         const std::wstring target = NormalizeNavigationInput(std::move(text));
         if (!target.empty()) {
@@ -340,7 +442,9 @@ private:
             Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
                 [this](HRESULT result, ICoreWebView2Environment* environment) -> HRESULT {
                     if (FAILED(result) || !environment || !IsWindow(hwnd_)) {
-                        ShowWebViewError(L"Nautrix could not initialize the WebView2 environment. Install or repair the Microsoft Edge WebView2 Runtime.");
+                        ShowWebViewError(
+                            L"Nautrix could not initialize the WebView2 environment. "
+                            L"Install or repair the Microsoft Edge WebView2 Runtime.");
                         return FAILED(result) ? result : E_FAIL;
                     }
 
@@ -355,7 +459,8 @@ private:
 
                                 controller_ = controller;
                                 webView_.Reset();
-                                const HRESULT webViewResult = controller_->get_CoreWebView2(webView_.GetAddressOf());
+                                const HRESULT webViewResult =
+                                    controller_->get_CoreWebView2(webView_.GetAddressOf());
                                 if (FAILED(webViewResult) || !webView_) {
                                     ShowWebViewError(L"Nautrix could not access the WebView2 browser instance.");
                                     return FAILED(webViewResult) ? webViewResult : E_FAIL;
@@ -371,7 +476,9 @@ private:
                 .Get());
 
         if (FAILED(startResult)) {
-            ShowWebViewError(L"Nautrix could not start WebView2. Install or repair the Microsoft Edge WebView2 Runtime.");
+            ShowWebViewError(
+                L"Nautrix could not start WebView2. "
+                L"Install or repair the Microsoft Edge WebView2 Runtime.");
         }
     }
 
@@ -415,7 +522,7 @@ private:
             Callback<ICoreWebView2NewWindowRequestedEventHandler>(
                 [this](ICoreWebView2*, ICoreWebView2NewWindowRequestedEventArgs* args) -> HRESULT {
                     LPWSTR uri = nullptr;
-                    if (SUCCEEDED(args->get_Uri(&uri)) && uri) {
+                    if (args && SUCCEEDED(args->get_Uri(&uri)) && uri) {
                         webView_->Navigate(uri);
                         CoTaskMemFree(uri);
                         args->put_Handled(TRUE);
@@ -460,7 +567,8 @@ private:
 
         LPWSTR title = nullptr;
         if (SUCCEEDED(webView_->get_DocumentTitle(&title)) && title) {
-            std::wstring windowTitle = *title ? std::wstring(title) + L" - Nautrix" : L"Nautrix";
+            const std::wstring windowTitle =
+                *title ? std::wstring(title) + L" - Nautrix" : L"Nautrix";
             SetWindowTextW(hwnd_, windowTitle.c_str());
             CoTaskMemFree(title);
         }
@@ -509,11 +617,13 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int showCommand) {
         {FVIRTKEY | FCONTROL, 'R', kCommandReload},
         {FVIRTKEY, VK_F5, kCommandReload},
     };
-    HACCEL acceleratorTable = CreateAcceleratorTableW(accelerators, static_cast<int>(std::size(accelerators)));
+    HACCEL acceleratorTable =
+        CreateAcceleratorTableW(accelerators, static_cast<int>(std::size(accelerators)));
 
     MSG message{};
     while (GetMessageW(&message, nullptr, 0, 0) > 0) {
-        if (!acceleratorTable || !TranslateAcceleratorW(browser.Handle(), acceleratorTable, &message)) {
+        if (!acceleratorTable ||
+            !TranslateAcceleratorW(browser.Handle(), acceleratorTable, &message)) {
             TranslateMessage(&message);
             DispatchMessageW(&message);
         }
