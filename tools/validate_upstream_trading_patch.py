@@ -62,7 +62,9 @@ def main() -> int:
 
         patched = target.read_text(encoding="utf-8")
         assert patched.count("// NAUTRIX_TRADING_PRIORITY_BEGIN") == 1
-        assert 'GetVar("NAUTRIX_PRECONNECT_ORIGINS")' in patched
+        assert 'GetVar("NAUTRIX_TRADING_MODE")' in patched
+        assert 'GetVar("NAUTRIX_TRADING_SITES")' in patched
+        assert 'EqualsCaseInsensitiveASCII(mode, "normal")' in patched
         assert "GetNautrixTradingSites()" in patched
         assert "RegisterListPref(kManagedTabDiscardingExceptions" in patched
         assert "RegisterListPref(kForceForegroundPriorityForUrls" in patched
