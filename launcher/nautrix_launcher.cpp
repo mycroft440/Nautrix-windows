@@ -111,11 +111,6 @@ std::vector<std::wstring> BuildInjectedArgs(const std::filesystem::path& latency
         features.emplace_back("EnableWebsocketsOverHttp3");
     }
 
-    if (ReadKey(latency_path, "enable_warm_renderer_pool", "1") != "0") {
-        features.emplace_back("PreferWarmRendererProcess");
-        features.emplace_back("SpareRendererForSitePerProcess");
-    }
-
     if (features.empty()) return {};
     std::wstring value = L"--enable-features=";
     for (size_t i = 0; i < features.size(); ++i) {
