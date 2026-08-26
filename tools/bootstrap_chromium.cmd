@@ -81,5 +81,9 @@ echo [Nautrix] Applying per-site trading network/scheduler latency layer...
 python "%ROOT%\tools\apply_trading_latency.py" "%SRC%"
 if errorlevel 1 exit /b 1
 
+echo [Nautrix] Applying intent-triggered trading spare-renderer warmup...
+python "%ROOT%\tools\apply_trading_warmup.py" "%SRC%"
+if errorlevel 1 exit /b 1
+
 echo [Nautrix] Chromium source is ready.
 exit /b 0
