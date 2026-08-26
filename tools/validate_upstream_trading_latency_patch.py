@@ -56,9 +56,9 @@ def main() -> int:
     ]
     sources = {path: fetch_text(revision, path) for path in source_paths}
 
-    # Validate the experimental symbols used by the launcher exist on the pin.
+    # Validate the experimental network symbols used by the launcher exist on
+    # the exact Chromium pin rather than trusting current-main documentation.
     net_features = fetch_text(revision, "net/base/features.cc")
-    content_features = fetch_text(revision, "content/public/common/content_features.cc")
     for token in (
         "kOptimisticDnsForTcp",
         "kEnableIntermediateDnsResults",
@@ -67,8 +67,12 @@ def main() -> int:
         "kEnableWebsocketsOverHttp3",
     ):
         assert token in net_features, f"pinned Chromium missing network feature: {token}"
-    for token in ("kPreferWarmRendererProcess", "kSpareRendererForSitePerProcess"):
-        assert token in content_features, f"pinned Chromium missing content feature: {token}"
+
+    # Chromium exposes a native reusable spare renderer. Nautrix deliberately
+    # preserves this mechanism instead of injecting unsupported feature names.
+    render_process_host = fetch_text(revision, "content/public/browser/render_process_host.h")
+    assert "WarmupSpareRenderProcessHost" in render_process_host
+    assert "spare RenderProcessHost" in render_process_host
 
     trading = load_module("apply_trading_latency.py", "apply_trading_latency")
     preconnect = load_module("apply_preconnect.py", "apply_preconnect")
