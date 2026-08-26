@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -99,10 +100,10 @@ std::vector<std::wstring> BuildInjectedArgs(const std::filesystem::path& latency
     std::vector<std::string> features;
     const std::string optimistic = ReadKey(latency_path, "optimistic_dns_for_tcp", "ab");
     if (FeatureEnabled(optimistic, "OptimisticDnsForTcp")) {
-        features.emplace_back("OptimisticDnsForTcp<OptimisticDNSForTCP");
+        features.emplace_back("OptimisticDnsForTcp");
         features.emplace_back("EnableIntermediateDnsResults");
-        features.emplace_back("AdjustIPv6FallbackTime<OptimisticDNSForTCP");
-        features.emplace_back("IPv6FallbackBasedOnRTT<OptimisticDNSForTCP");
+        features.emplace_back("AdjustIPv6FallbackTime");
+        features.emplace_back("IPv6FallbackBasedOnRTT");
     }
 
     const std::string websocket_h3 = ReadKey(latency_path, "websocket_over_http3", "ab");
@@ -127,7 +128,6 @@ std::vector<std::wstring> BuildInjectedArgs(const std::filesystem::path& latency
 }  // namespace nautrix_bootstrap
 
 #include <cstring>
-#include <iterator>
 
 #define wmain NautrixOriginalMain
 #include "nautrix_launcher_impl.inc"
@@ -145,17 +145,17 @@ int wmain(int argc, wchar_t** argv) {
     owned.reserve(static_cast<size_t>(argc) + 4);
     for (int i = 0; i < argc; ++i) owned.emplace_back(argv[i]);
     for (auto& injected : nautrix_bootstrap::BuildInjectedArgs(config_dir / L"latency.ini")) {
-        bool duplicate_feature_switch = false;
+        bool merged_feature_switch = false;
         if (injected.rfind(L"--enable-features=", 0) == 0) {
             for (size_t i = 1; i < owned.size(); ++i) {
                 if (owned[i].rfind(L"--enable-features=", 0) == 0) {
                     owned[i] += L"," + injected.substr(std::wstring_view(L"--enable-features=").size());
-                    duplicate_feature_switch = true;
+                    merged_feature_switch = true;
                     break;
                 }
             }
         }
-        if (!duplicate_feature_switch) owned.push_back(std::move(injected));
+        if (!merged_feature_switch) owned.push_back(std::move(injected));
     }
 
     std::vector<wchar_t*> forwarded;
