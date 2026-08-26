@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate Nautrix trading latency/keepalive patches against pinned Chromium."""
+"""Validate Nautrix trading latency/keepalive/warmup patches against pinned Chromium."""
 
 from __future__ import annotations
 
@@ -53,11 +53,11 @@ def main() -> int:
         "third_party/blink/renderer/platform/scheduler/main_thread/frame_scheduler_impl.h",
         "third_party/blink/renderer/platform/scheduler/main_thread/frame_scheduler_impl.cc",
         "chrome/browser/navigation_predictor/search_engine_preconnector.cc",
+        "chrome/browser/ui/navigator/browser_navigator.cc",
     ]
     sources = {path: fetch_text(revision, path) for path in source_paths}
 
-    # Validate the experimental network symbols used by the launcher exist on
-    # the exact Chromium pin rather than trusting current-main documentation.
+    # Validate experimental network symbols on the exact Chromium pin.
     net_features = fetch_text(revision, "net/base/features.cc")
     for token in (
         "kOptimisticDnsForTcp",
@@ -68,14 +68,25 @@ def main() -> int:
     ):
         assert token in net_features, f"pinned Chromium missing network feature: {token}"
 
-    # Chromium exposes a native reusable spare renderer. Nautrix deliberately
-    # preserves this mechanism instead of injecting unsupported feature names.
-    render_process_host = fetch_text(revision, "content/public/browser/render_process_host.h")
-    assert "WarmupSpareRenderProcessHost" in render_process_host
-    assert "spare RenderProcessHost" in render_process_host
+    # The Windows timer API requires each successful activation to be paired
+    # with a later deactivation. The Nautrix patch enforces that invariant.
+    time_header = fetch_text(revision, "base/time/time.h")
+    assert "EnableHighResolutionTimer(bool enable)" in time_header
+    assert "ActivateHighResolutionTimer(bool activate)" in time_header
+    assert "Each successful activate call must be paired" in time_header
+
+    # Use the actual spare-renderer manager API exposed by Chromium 152. This
+    # API is explicitly intended for imminent navigations.
+    spare_manager = fetch_text(
+        revision, "content/public/browser/spare_render_process_host_manager.h"
+    )
+    assert "class CONTENT_EXPORT SpareRenderProcessHostManager" in spare_manager
+    assert "WarmupSpare(BrowserContext* browser_context)" in spare_manager
+    assert "navigation is imminent" in spare_manager
 
     trading = load_module("apply_trading_latency.py", "apply_trading_latency")
     preconnect = load_module("apply_preconnect.py", "apply_preconnect")
+    warmup = load_module("apply_trading_warmup.py", "apply_trading_warmup")
 
     with tempfile.TemporaryDirectory() as temp:
         root = Path(temp)
@@ -86,11 +97,14 @@ def main() -> int:
         trading.apply(root)
         preconnect.apply(root)
         preconnect.apply(root)
+        warmup.apply(root)
+        warmup.apply(root)
 
         url_loader = (root / source_paths[0]).read_text(encoding="utf-8")
         frame_h = (root / source_paths[1]).read_text(encoding="utf-8")
         frame_cc = (root / source_paths[2]).read_text(encoding="utf-8")
         preconnect_cc = (root / source_paths[3]).read_text(encoding="utf-8")
+        navigator_cc = (root / source_paths[4]).read_text(encoding="utf-8")
 
         assert url_loader.count("// NAUTRIX_TRADING_NETWORK_BEGIN") == 1
         assert "url_request_->SetPriority(net::HIGHEST)" in url_loader
@@ -103,6 +117,12 @@ def main() -> int:
         assert "NAUTRIX_SELECTIVE_THROTTLING_BYPASS" in frame_cc
         assert "return ThrottlingType::kNone" in frame_cc
         assert "return TaskPriority::kHighPriority" in frame_cc
+        assert "NAUTRIX_HIGH_RES_TIMER" in frame_cc
+        assert "frame_type_ == FrameType::kMainFrame" in frame_cc
+        assert "base::Time::EnableHighResolutionTimer(true)" in frame_cc
+        assert "base::Time::ActivateHighResolutionTimer(true)" in frame_cc
+        # One deactivation for URL/mode changes and one for destruction.
+        assert frame_cc.count("base::Time::ActivateHighResolutionTimer(false)") >= 2
 
         assert preconnect_cc.count("// NAUTRIX_PRIORITY_PRECONNECT_BEGIN") == 1
         assert "ConnectionKeepAliveConfig" in preconnect_cc
@@ -110,7 +130,15 @@ def main() -> int:
         assert "NAUTRIX_KEEPALIVE_PING_SECONDS" in preconnect_cc
         assert "enable_connection_keep_alive = true" in preconnect_cc
 
-    print(f"Nautrix trading latency patches match pinned Chromium revision {revision}.")
+        assert navigator_cc.count("// NAUTRIX_TRADING_WARMUP_BEGIN") == 1
+        assert 'NAUTRIX_SPARE_RENDERER_WARMUP' in navigator_cc
+        assert 'NAUTRIX_INTENT_PRECONNECT' in navigator_cc
+        assert '#include "content/public/browser/spare_render_process_host_manager.h"' in navigator_cc
+        assert "SpareRenderProcessHostManager::Get().WarmupSpare(" in navigator_cc
+        assert "params->initiating_profile" in navigator_cc
+        assert "WarmupSpareRenderProcessHost" not in navigator_cc
+
+    print(f"Nautrix trading latency/warmup patches match pinned Chromium revision {revision}.")
     return 0
 
 
