@@ -32,7 +32,7 @@ foreach ($adapter in $adapters) {
     $advanced = Get-NetAdapterAdvancedProperty -Name $adapter.Name -ErrorAction SilentlyContinue
     foreach ($propertyName in @('Interrupt Moderation','Interrupt Moderation Rate','Energy Efficient Ethernet','Green Ethernet','Receive Buffers','Transmit Buffers')) {
         $match = $advanced | Where-Object DisplayName -eq $propertyName | Select-Object -First 1
-        if ($match) { $lines.Add("  $propertyName: $($match.DisplayValue)") }
+        if ($match) { $lines.Add("  ${propertyName}: $($match.DisplayValue)") }
     }
     $lines.Add("")
 }
