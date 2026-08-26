@@ -1,0 +1,64 @@
+name: Validate Chromium Integration
+
+on:
+  push:
+    branches:
+      - main
+      - 'feat/**'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Compile Python tooling
+        shell: pwsh
+        run: python -m compileall -q tools
+
+      - name: Parse PowerShell tooling
+        shell: pwsh
+        run: ./tools/validate_powershell.ps1
+
+      - name: Validate Nautrix Chromium layer
+        shell: pwsh
+        run: python tools/validate_nautrix.py
+
+      - name: Validate extended DNS latency and PGO layer
+        shell: pwsh
+        run: python tools/validate_extended.py
+
+      - name: Validate DNS and preconnect patches against pinned Chromium
+        shell: pwsh
+        run: python tools/validate_upstream_dns_patch.py
+
+      - name: Validate trading priority patch against pinned Chromium
+        shell: pwsh
+        run: python tools/validate_upstream_trading_patch.py
+
+      - name: Validate trading latency and keepalive patches against pinned Chromium
+        shell: pwsh
+        run: python tools/validate_upstream_trading_latency_patch.py
+
+      - name: Build native DNS/latency tools
+        shell: cmd
+        run: tools\build_launcher.cmd
+
+      - name: Upload native tools
+        uses: actions/upload-artifact@v4
+        with:
+          name: NautrixNetworkTools-x64
+          path: |
+            .launcher-build/Release/NautrixLauncher.exe
+            .launcher-build/Release/NautrixNetworkSettings.exe
+            config/dns.ini
+            config/latency.ini
+          if-no-files-found: error

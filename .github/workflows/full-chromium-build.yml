@@ -1,0 +1,75 @@
+name: Full Chromium Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: Build variant
+        required: true
+        default: baseline
+        type: choice
+        options:
+          - baseline
+          - pgo
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: [self-hosted, Windows, X64, nautrix-chromium]
+    timeout-minutes: 720
+    steps:
+      - name: Checkout Nautrix
+        uses: actions/checkout@v5
+
+      - name: Build native tools
+        shell: cmd
+        run: tools\build_launcher.cmd
+
+      - name: Build Chromium baseline
+        if: ${{ inputs.variant == 'baseline' }}
+        shell: cmd
+        run: tools\build_chromium.cmd
+
+      - name: Build Chromium PGO
+        if: ${{ inputs.variant == 'pgo' }}
+        shell: cmd
+        run: tools\build_chromium_pgo.cmd
+
+      - name: Runtime smoke baseline
+        if: ${{ inputs.variant == 'baseline' }}
+        shell: pwsh
+        run: >-
+          ./tools/runtime_smoke.ps1
+          -Browser "$PWD/.chromium-work/src/out/Nautrix/chrome.exe"
+          -Launcher "$PWD/.launcher-build/Release/NautrixLauncher.exe"
+          -ConfigDir "$PWD/config"
+
+      - name: Runtime smoke PGO
+        if: ${{ inputs.variant == 'pgo' }}
+        shell: pwsh
+        run: >-
+          ./tools/runtime_smoke.ps1
+          -Browser "$PWD/.chromium-work/src/out/NautrixPGO/chrome.exe"
+          -Launcher "$PWD/.launcher-build/Release/NautrixLauncher.exe"
+          -ConfigDir "$PWD/config"
+
+      - name: Package deliverables
+        shell: pwsh
+        run: |
+          $out = if ('${{ inputs.variant }}' -eq 'pgo') { '.chromium-work/src/out/NautrixPGO' } else { '.chromium-work/src/out/Nautrix' }
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item "$out/mini_installer.exe" 'dist/NautrixSetup.exe'
+          Copy-Item '.launcher-build/Release/NautrixLauncher.exe' dist/
+          Copy-Item '.launcher-build/Release/NautrixNetworkSettings.exe' dist/
+          Copy-Item -Recurse config 'dist/config'
+          Copy-Item 'docs/RUNTIME_CHECKLIST.md' dist/
+
+      - name: Upload deliverables
+        uses: actions/upload-artifact@v4
+        with:
+          name: Nautrix-${{ inputs.variant }}-x64
+          path: dist/
+          compression-level: 6
+          if-no-files-found: error

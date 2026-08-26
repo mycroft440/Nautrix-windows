@@ -1,0 +1,36 @@
+name: Compare Baseline vs PGO
+
+on:
+  workflow_dispatch:
+    inputs:
+      baseline_browser:
+        description: Absolute path to baseline chrome.exe on the self-hosted runner
+        required: true
+        type: string
+      pgo_browser:
+        description: Absolute path to PGO chrome.exe on the self-hosted runner
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: [self-hosted, Windows, X64, nautrix-chromium]
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+      - name: Compare navigation performance
+        shell: pwsh
+        run: >-
+          ./tools/benchmark_pgo.ps1
+          -BaselineBrowser "${{ inputs.baseline_browser }}"
+          -PgoBrowser "${{ inputs.pgo_browser }}"
+          -Runs 5
+      - name: Upload comparison
+        uses: actions/upload-artifact@v4
+        with:
+          name: Nautrix-PGO-comparison
+          path: ~/AppData/Local/Nautrix/pgo-comparison/
+          if-no-files-found: error

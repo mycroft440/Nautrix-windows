@@ -1,0 +1,23 @@
+# Chromium checkout/builds are huge and are never committed.
+.chromium-work/
+.chromium-cache/
+
+# Nautrix native launcher build
+.launcher-build/
+
+# Nautrix build/package output
+dist/
+artifacts/
+
+# IDE/OS
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+Thumbs.db
+Desktop.ini
+
+# Python
+__pycache__/
+*.pyc
