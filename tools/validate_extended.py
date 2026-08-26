@@ -44,7 +44,6 @@ def validate_configs() -> None:
         "keepalive_ping_seconds=25",
         "enable_network_priority_boost=1",
         "enable_selective_throttling_bypass=1",
-        "preserve_chromium_spare_renderer=1",
         "enable_intent_preconnect=1",
         "enable_high_resolution_timer=1",
         "enable_freezing_protection=1",
