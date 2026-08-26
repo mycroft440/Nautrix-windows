@@ -46,6 +46,11 @@ def validate_configs() -> None:
         "enable_selective_throttling_bypass=1",
         "preserve_chromium_spare_renderer=1",
         "enable_intent_preconnect=1",
+        "enable_high_resolution_timer=1",
+        "enable_freezing_protection=1",
+        "enable_trading_process_priority=1",
+        "disable_ecoqos_for_trading=1",
+        "enable_spare_renderer_warmup=1",
         "optimistic_dns_for_tcp=ab",
         "websocket_over_http3=ab",
         "enable_https_svcb=1",
@@ -83,6 +88,11 @@ def validate_native_tools() -> None:
         "NAUTRIX_KEEPALIVE_ENABLED",
         "NAUTRIX_NETWORK_PRIORITY_BOOST",
         "NAUTRIX_SELECTIVE_THROTTLING_BYPASS",
+        "NAUTRIX_HIGH_RES_TIMER",
+        "NAUTRIX_FREEZING_PROTECTION",
+        "NAUTRIX_TRADING_PROCESS_PRIORITY",
+        "NAUTRIX_DISABLE_ECOQOS",
+        "NAUTRIX_SPARE_RENDERER_WARMUP",
         "OptimisticDnsForTcp",
         "EnableWebsocketsOverHttp3",
         "StableAbBucket",
@@ -99,10 +109,36 @@ def validate_trading_latency_tools() -> None:
         "NAUTRIX_TRADING_MODE",
         "NAUTRIX_TRADING_SITES",
         "NAUTRIX_SELECTIVE_THROTTLING_BYPASS",
+        "NAUTRIX_HIGH_RES_TIMER",
+        "base::Time::EnableHighResolutionTimer(true)",
+        "base::Time::ActivateHighResolutionTimer(true)",
+        "base::Time::ActivateHighResolutionTimer(false)",
         "return ThrottlingType::kNone",
         "return TaskPriority::kHighPriority",
     ):
         assert token in patch, f"missing trading patch token: {token}"
+
+    priority = read("tools/apply_trading_priority.py")
+    for token in (
+        "NAUTRIX_FREEZING_PROTECTION",
+        "NAUTRIX_TRADING_PROCESS_PRIORITY",
+        "NAUTRIX_DISABLE_ECOQOS",
+        "GetNautrixLifecycleProtectedSites",
+        "GetNautrixForegroundPrioritySites",
+        "kManagedTabDiscardingExceptions",
+        "kForceForegroundPriorityForUrls",
+    ):
+        assert token in priority, f"missing trading priority token: {token}"
+
+    warmup = read("tools/apply_trading_warmup.py")
+    for token in (
+        "NAUTRIX_SPARE_RENDERER_WARMUP",
+        "NAUTRIX_INTENT_PRECONNECT",
+        "SpareRenderProcessHostManager::Get().WarmupSpare",
+        "spare_render_process_host_manager.h",
+    ):
+        assert token in warmup, f"missing trading warmup token: {token}"
+    assert "WarmupSpareRenderProcessHost" not in warmup
 
     preconnect = read("tools/apply_preconnect.py")
     for token in (
@@ -130,10 +166,22 @@ def validate_trading_latency_tools() -> None:
 def validate_pgo() -> None:
     baseline = read("chromium/args/Release.gn")
     pgo = read("chromium/args/ReleasePGO.gn")
+    training = read("chromium/args/ReleasePGOTraining.gn")
+    custom_build = read("tools/build_chromium_pgo_custom.cmd")
+    profile = read("tools/generate_nautrix_pgo_profile.cmd")
+
     assert "chrome_pgo_phase = 0" in baseline
     assert "chrome_pgo_phase = 2" in pgo
     assert "is_official_build = true" in pgo
     assert "is_chrome_branded = false" in pgo
+    assert "chrome_pgo_phase = 1" in training
+    assert "is_official_build = true" in training
+    assert "tools\\pgo\\generate_profile.py" in profile
+    assert "profile.profdata" in profile
+    assert "pgo_data_path" in custom_build
+    assert "profile.profdata" in custom_build
+    assert "chrome_pgo_phase = 2" in custom_build
+    assert "mini_installer" in custom_build
     assert "mini_installer" in read("tools/build_chromium.cmd")
     assert "mini_installer" in read("tools/build_chromium_pgo.cmd")
 
@@ -172,7 +220,12 @@ def validate_automation() -> None:
         assert token in regression, f"runtime regression missing: {token}"
 
     bootstrap = read("tools/bootstrap_chromium.cmd")
-    for token in ("apply_preconnect.py", "apply_trading_priority.py", "apply_trading_latency.py"):
+    for token in (
+        "apply_preconnect.py",
+        "apply_trading_priority.py",
+        "apply_trading_latency.py",
+        "apply_trading_warmup.py",
+    ):
         assert token in bootstrap, f"bootstrap missing: {token}"
 
 
