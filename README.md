@@ -2,8 +2,8 @@
 
 Nautrix Windows is a Windows browser focused on responsiveness and low latency.
 
-The browser is now based on the **full Chromium source tree**, not WebView2,
-CEF, Electron, or another embedded webview layer.
+The browser is based on the **full Chromium source tree**, not WebView2, CEF,
+Electron, or another embedded webview layer.
 
 ## Current Chromium base
 
@@ -19,16 +19,43 @@ layer on top of that exact upstream revision.
 
 ## Why this architecture
 
-A full Chromium browser gives Nautrix the same open browser platform used by
+A full Chromium browser gives Nautrix the open browser platform used by
 Chromium-derived desktop browsers: Blink, V8, the Chromium network stack,
 cookies/site storage, WebAuthn/passkeys, FedCM, multiprocess rendering, GPU
-compositing, tabs, downloads, history, profiles, DevTools and other browser
-facilities.
-
-This removes the embedded-user-agent limitation of the old WebView2 prototype.
+compositing, tabs, downloads, history, profiles, DevTools and extensions.
 
 It does **not** make Nautrix Google Chrome. Private Google Chrome services such
-as official Chrome Sync are not enabled and are not impersonated.
+as official Chrome Sync are not enabled or impersonated.
+
+## Browser-local DNS optimizer
+
+Nautrix has a native launcher and Chromium Network Service integration for DNS.
+
+`config/dns.ini` supports:
+
+- `mode=system`
+- `mode=manual`
+- `mode=automatic`
+
+Automatic mode benchmarks real DNS queries against configured providers and
+scores median latency, p95, jitter and failures. The selected resolver is cached
+per network signature with hysteresis to avoid unnecessary switching. When
+configured, the chosen resolver is used through Chromium Secure DNS/DoH.
+
+The implementation does not change the Windows DNS configuration globally.
+
+See [`docs/DNS_AND_LATENCY.md`](docs/DNS_AND_LATENCY.md).
+
+## Low-latency profile
+
+`config/latency.ini` contains A/B-testable browser networking options. The first
+profile exposes Chromium Happy Eyeballs V3 while retaining QUIC, DNS/browser
+caches and connection pooling.
+
+Nautrix treats DNS time, TCP/QUIC connect, TLS, RTT/jitter, first byte, rendering
+and input latency as separate metrics. Future priority/trading-site tuning will
+use Chromium's existing pre-resolve/preconnect facilities after the first full
+runtime baseline is validated.
 
 ## Build
 
@@ -42,6 +69,9 @@ tools\build_chromium.cmd
 tools\run_nautrix.cmd
 ```
 
+`tools\run_nautrix.cmd` builds/uses the native `NautrixLauncher`, which selects
+DNS according to `config/dns.ini` and then launches the Chromium browser.
+
 Interactive Google account compatibility test:
 
 ```bat
@@ -52,13 +82,22 @@ tools\test_google_login.cmd
 
 ```text
 chromium/
-  VERSION              pinned upstream Stable version/revision
-  args/Release.gn      Windows x64 production baseline
+  VERSION
+  args/Release.gn
+
+config/
+  dns.ini
+  latency.ini
+
+launcher/
+  CMakeLists.txt
+  main.cpp
 
 tools/
   bootstrap_chromium.cmd
   apply_nautrix.py
   build_chromium.cmd
+  build_launcher.cmd
   run_nautrix.cmd
   test_google_login.cmd
   validate_nautrix.py
@@ -66,19 +105,22 @@ tools/
 docs/
   ARCHITECTURE.md
   CHROMIUM_BUILD.md
+  DNS_AND_LATENCY.md
 
 PLAN.md
 ```
 
 ## CI
 
-GitHub-hosted CI validates the Nautrix patch/configuration layer. It does not
-perform the full Chromium build because upstream Chromium requires a very large
-Windows checkout/build environment. The full binary build is performed on a
-Windows workstation or self-hosted runner that meets Chromium's requirements.
+GitHub-hosted Windows CI validates the Nautrix downstream Chromium patch layer
+and compiles the native DNS/latency launcher. It does not perform the full
+Chromium build because a complete upstream checkout/build requires a much
+larger Windows environment.
 
 ## Status
 
-The source/build migration from WebView2 to Chromium is implemented in the
-repository. The next gate is a full x64 Chromium build and interactive browser
-validation, including Google web login.
+The WebView2-to-Chromium source/build migration and the first browser-local
+custom/automatic DNS layer are implemented in the downstream repository.
+
+The remaining gate is a full x64 Chromium build and interactive validation of
+navigation, Google web login, extensions, DNS behavior and measured latency.

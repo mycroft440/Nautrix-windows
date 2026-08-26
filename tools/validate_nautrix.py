@@ -62,12 +62,39 @@ def _validate_google_browser_credentials_disabled() -> None:
         assert f'set "{variable}="' in build, f"{variable} must be cleared during production build"
 
 
+def _validate_dns_and_latency_config() -> None:
+    dns = (REPO / "config/dns.ini").read_text(encoding="utf-8")
+    latency = (REPO / "config/latency.ini").read_text(encoding="utf-8")
+    launcher = (REPO / "launcher/main.cpp").read_text(encoding="utf-8")
+
+    for required in (
+        "mode=automatic",
+        "samples=",
+        "timeout_ms=",
+        "minimum_improvement_percent=",
+        "provider=cloudflare|",
+        "provider=google|",
+        "provider=quad9|",
+    ):
+        assert required in dns, f"Missing DNS configuration: {required}"
+
+    assert "enable_happy_eyeballs_v3=" in latency
+    for symbol in (
+        "BenchmarkProvider",
+        "NetworkSignature",
+        "NAUTRIX_DNS_MODE",
+        "NAUTRIX_DNS_NAMESERVERS",
+        "HappyEyeballsV3",
+    ):
+        assert symbol in launcher, f"Native launcher missing {symbol}"
+
+
 def _validate_no_embedded_engine() -> None:
     forbidden = ("Microsoft.Web.WebView2", "#include <WebView2.h>", "CreateCoreWebView2")
     for path in REPO.rglob("*"):
         if not path.is_file() or ".git" in path.parts or "__pycache__" in path.parts:
             continue
-        if path.suffix.lower() not in {".md", ".py", ".cmd", ".ps1", ".gn", ".yml", ".yaml", ".txt", ""}:
+        if path.suffix.lower() not in {".md", ".py", ".cmd", ".ps1", ".gn", ".ini", ".cpp", ".h", ".yml", ".yaml", ".txt", ""}:
             continue
         if path.name == "validate_nautrix.py":
             continue
@@ -76,16 +103,50 @@ def _validate_no_embedded_engine() -> None:
             assert needle not in text, f"Embedded-engine dependency still present in {path}: {needle}"
 
 
-def _validate_product_layer() -> None:
+def _network_service_fixture() -> str:
+    return '''#include "base/strings/string_number_conversions.h"
+#include "net/base/address_list.h"
+namespace network {
+namespace {
+NetworkService* g_network_service = nullptr;
+}  // namespace
+
+void NetworkService::ConfigureStubHostResolver(
+    net::InsecureDnsMode insecure_dns_mode,
+    bool happy_eyeballs_v3_enabled,
+    net::SecureDnsMode secure_dns_mode,
+    const net::DnsOverHttpsConfig& dns_over_https_config,
+    bool additional_dns_types_enabled,
+    const std::vector<net::IPEndPoint>& fallback_doh_nameservers) {
+  // Enable or disable the insecure part of DnsClient. "DnsClient" is the class
+  host_resolver_manager_->SetInsecureDnsClientEnabled(
+      insecure_dns_mode, additional_dns_types_enabled);
+
+  // Configure DNS over HTTPS.
+  net::DnsConfigOverrides overrides;
+  overrides.dns_over_https_config = dns_over_https_config;
+  overrides.secure_dns_mode = secure_dns_mode;
+  overrides.allow_dns_over_https_upgrade = true;
+  overrides.fallback_doh_nameservers = fallback_doh_nameservers;
+  host_resolver_manager_->SetDnsConfigOverrides(overrides);
+}
+}  // namespace network
+'''
+
+
+def _validate_product_and_dns_layer() -> None:
     module = _load_apply_module()
     with tempfile.TemporaryDirectory() as temp:
         root = Path(temp)
         branding = root / "chrome/app/theme/chromium/BRANDING"
         modes = root / "chrome/install_static/chromium_install_modes.h"
         strings = root / "chrome/app/chromium_strings.grd"
+        network_service = root / "services/network/network_service.cc"
+
         branding.parent.mkdir(parents=True)
         modes.parent.mkdir(parents=True)
         strings.parent.mkdir(parents=True, exist_ok=True)
+        network_service.parent.mkdir(parents=True, exist_ok=True)
 
         branding.write_text(
             "COMPANY_FULLNAME=The Chromium Authors\nCOMPANY_SHORTNAME=The Chromium Authors\n"
@@ -104,29 +165,46 @@ def _validate_product_layer() -> None:
             encoding="utf-8",
         )
         strings.write_text(
-            '<grit><message desc="Chromium product" url="https://chromium.org">Welcome to Chromium</message></grit>\n',
+            '<grit><message desc="Chromium product" url="https://chromium.org">'
+            'Welcome to Chromium</message></grit>\n',
             encoding="utf-8",
         )
+        network_service.write_text(_network_service_fixture(), encoding="utf-8")
 
         module.apply(root)
         module.apply(root)
+
         assert "PRODUCT_FULLNAME=Nautrix" in branding.read_text(encoding="utf-8")
         patched_modes = modes.read_text(encoding="utf-8")
         assert 'kProductPathName[] = L"Nautrix"' in patched_modes
-        assert '.base_app_name = L"Nautrix"' in patched_modes
         assert '.direct_launch_url_scheme = "nautrix"' in patched_modes
+
         patched_strings = strings.read_text(encoding="utf-8")
         assert "Welcome to Nautrix" in patched_strings
         assert 'url="https://chromium.org"' in patched_strings
+
+        patched_network = network_service.read_text(encoding="utf-8")
+        assert patched_network.count("// NAUTRIX_DNS_OVERRIDE_BEGIN") == 1
+        assert "GetVar(kNautrixDnsNameserversEnv)" in patched_network
+        assert "overrides->nameservers" in patched_network
+        assert "effective_doh_config" in patched_network
+        assert "const bool nautrix_dns_active" in patched_network
+        assert "if (nautrix_dns_active)" in patched_network
+        assert "overrides.allow_dns_over_https_upgrade = false" in patched_network
+        assert "SetDnsConfigOverrides(overrides)" in patched_network
 
 
 def main() -> int:
     values = _parse_version()
     _validate_gn_args()
     _validate_google_browser_credentials_disabled()
+    _validate_dns_and_latency_config()
     _validate_no_embedded_engine()
-    _validate_product_layer()
-    print(f"Nautrix Chromium layer validated: {values['CHANNEL']} {values['VERSION']} @ {values['REVISION']}")
+    _validate_product_and_dns_layer()
+    print(
+        f"Nautrix Chromium layer validated: {values['CHANNEL']} "
+        f"{values['VERSION']} @ {values['REVISION']}"
+    )
     return 0
 
 

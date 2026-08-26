@@ -2,6 +2,9 @@
 .chromium-work/
 .chromium-cache/
 
+# Nautrix native launcher build
+.launcher-build/
+
 # Nautrix build/package output
 dist/
 artifacts/

@@ -23,3 +23,14 @@ jobs:
       - name: Validate Nautrix Chromium layer
         shell: pwsh
         run: python tools/validate_nautrix.py
+
+      - name: Build native DNS/latency launcher
+        shell: cmd
+        run: tools\build_launcher.cmd
+
+      - name: Upload launcher
+        uses: actions/upload-artifact@v4
+        with:
+          name: NautrixLauncher-x64
+          path: .launcher-build/Release/NautrixLauncher.exe
+          if-no-files-found: error
