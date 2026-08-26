@@ -22,6 +22,10 @@ def validate_configs() -> None:
         "prefer_encrypted=1",
         "doh_samples=2",
         "priority_hosts=",
+        "www.binance.com",
+        "www.bybit.com",
+        "www.okx.com",
+        "www.tradingview.com",
         "2606:4700:4700::1111",
         "2001:4860:4860::8888",
         "2620:fe::fe",
@@ -31,9 +35,23 @@ def validate_configs() -> None:
 
     latency = read("config/latency.ini")
     for token in (
+        "trading_mode=automatic",
         "enable_happy_eyeballs_v3=1",
         "enable_priority_preconnect=1",
         "enable_quic=1",
+        "enable_connection_keepalive=1",
+        "keepalive_idle_seconds=120",
+        "keepalive_ping_seconds=25",
+        "enable_network_priority_boost=1",
+        "enable_selective_throttling_bypass=1",
+        "enable_warm_renderer_pool=1",
+        "enable_intent_preconnect=1",
+        "optimistic_dns_for_tcp=ab",
+        "websocket_over_http3=ab",
+        "enable_https_svcb=1",
+        "enable_windows_nic_diagnostics=1",
+        "metrics_percentiles=p50,p95,p99",
+        "trading_sites=",
         "enable_netlog=0",
         "enable_startup_trace=0",
         "process_priority=above_normal",
@@ -46,7 +64,8 @@ def validate_native_tools() -> None:
     assert "NautrixLauncher" in cmake
     assert "NautrixNetworkSettings" in cmake
     assert "winhttp" in cmake
-    launcher = read("launcher/nautrix_launcher_impl.inc")
+
+    launcher_impl = read("launcher/nautrix_launcher_impl.inc")
     for token in (
         "QueryDoh(",
         "kDnsTypeAAAA",
@@ -55,7 +74,57 @@ def validate_native_tools() -> None:
         "--nautrix-trace",
         "NAUTRIX_PRECONNECT_ORIGINS",
     ):
-        assert token in launcher
+        assert token in launcher_impl
+
+    launcher = read("launcher/nautrix_launcher.cpp")
+    for token in (
+        "NAUTRIX_TRADING_MODE",
+        "NAUTRIX_TRADING_SITES",
+        "NAUTRIX_KEEPALIVE_ENABLED",
+        "NAUTRIX_NETWORK_PRIORITY_BOOST",
+        "NAUTRIX_SELECTIVE_THROTTLING_BYPASS",
+        "OptimisticDnsForTcp",
+        "EnableWebsocketsOverHttp3",
+        "PreferWarmRendererProcess",
+        "SpareRendererForSitePerProcess",
+        "StableAbBucket",
+    ):
+        assert token in launcher, f"missing launcher latency token: {token}"
+
+
+def validate_trading_latency_tools() -> None:
+    patch = read("tools/apply_trading_latency.py")
+    for token in (
+        "url_request_->SetPriority(net::HIGHEST)",
+        "NAUTRIX_TRADING_MODE",
+        "NAUTRIX_TRADING_SITES",
+        "NAUTRIX_SELECTIVE_THROTTLING_BYPASS",
+        "return ThrottlingType::kNone",
+        "return TaskPriority::kHighPriority",
+    ):
+        assert token in patch, f"missing trading patch token: {token}"
+
+    preconnect = read("tools/apply_preconnect.py")
+    for token in (
+        "ConnectionKeepAliveConfig",
+        "NAUTRIX_KEEPALIVE_IDLE_SECONDS",
+        "NAUTRIX_KEEPALIVE_PING_SECONDS",
+        "enable_connection_keep_alive = true",
+    ):
+        assert token in preconnect, f"missing keepalive token: {token}"
+
+    mode_switch = read("tools/set_trading_mode.ps1")
+    for token in ("automatic", "normal", "aggressive", "trading_mode=$Mode"):
+        assert token in mode_switch, f"missing trading-mode switch token: {token}"
+
+    nic = read("tools/windows_nic_diagnostics.ps1")
+    for token in ("Get-NetAdapter", "Get-NetAdapterRss", "Get-NetAdapterRsc", "Read-only"):
+        assert token in nic, f"missing NIC diagnostic token: {token}"
+    assert "Set-NetAdapter" not in nic, "NIC diagnostics must remain read-only"
+
+    benchmark = read("tools/benchmark_navigation.ps1")
+    for token in ("p50_ms", "p95_ms", "p99_ms", "Get-Percentile"):
+        assert token in benchmark, f"missing tail-latency metric: {token}"
 
 
 def validate_pgo() -> None:
@@ -103,15 +172,17 @@ def validate_automation() -> None:
         assert token in regression, f"runtime regression missing: {token}"
 
     bootstrap = read("tools/bootstrap_chromium.cmd")
-    assert "apply_preconnect.py" in bootstrap
+    for token in ("apply_preconnect.py", "apply_trading_priority.py", "apply_trading_latency.py"):
+        assert token in bootstrap, f"bootstrap missing: {token}"
 
 
 def main() -> int:
     validate_configs()
     validate_native_tools()
+    validate_trading_latency_tools()
     validate_pgo()
     validate_automation()
-    print("Nautrix extended DNS/latency/PGO automation checks passed.")
+    print("Nautrix extended DNS/trading-latency/PGO automation checks passed.")
     return 0
 
 
