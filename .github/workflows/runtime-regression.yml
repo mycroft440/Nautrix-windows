@@ -14,28 +14,31 @@ permissions:
 jobs:
   benchmark:
     runs-on: [self-hosted, Windows, X64, nautrix-chromium]
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
       - name: Build native tools
         shell: cmd
         run: tools\build_launcher.cmd
-      - name: Runtime smoke
+      - name: Runtime smoke and DNS benchmark
         shell: pwsh
         run: >-
           ./tools/runtime_smoke.ps1
           -Browser "${{ inputs.browser_path }}"
           -Launcher "$PWD/.launcher-build/Release/NautrixLauncher.exe"
           -ConfigDir "$PWD/config"
-      - name: Navigation benchmark
+      - name: Chromium network/NetLog probes
+        shell: pwsh
+        run: ./tools/chromium_network_probe.ps1 -Browser "${{ inputs.browser_path }}"
+      - name: Navigation regression
         shell: pwsh
         run: ./tools/benchmark_navigation.ps1 -Browser "${{ inputs.browser_path }}" -Runs 5
-      - name: Process profile
+      - name: CPU RAM process-tree profile
         shell: pwsh
-        run: ./tools/profile_runtime.ps1 -Seconds 30
+        run: ./tools/profile_browser.ps1 -Browser "${{ inputs.browser_path }}" -Seconds 30
       - name: Upload measurements
         uses: actions/upload-artifact@v4
         with:
           name: Nautrix-runtime-regression
           path: ~/AppData/Local/Nautrix/
-          if-no-files-found: warn
+          if-no-files-found: error

@@ -2,32 +2,37 @@
 
 ## Execution order
 
-1. Stabilize/pin Chromium and keep lightweight CI green.
-2. Finish browser-local custom/automatic DNS and network-route scoring.
-3. Add IPv4/IPv6, real DoH-path measurement and diagnostics.
-4. Add controlled Chromium pre-resolve/preconnect for priority sites.
-5. Instrument startup/network/input/runtime performance and establish regression tests.
-6. Add PGO build path and compare it against the baseline build.
-7. Build the complete Chromium-derived Nautrix on a capable Windows runner.
-8. Run browser/runtime compatibility tests (Google login, extensions, sessions, normal browser features).
-9. Only after measurements, keep/tune optimizations that measurably reduce latency.
+1. [x] Stabilize/pin Chromium and lightweight CI.
+2. [x] Implement browser-local custom/automatic DNS and route scoring.
+3. [x] Add IPv4/IPv6, DoH path measurement and diagnostics.
+4. [x] Connect priority origins to Chromium pre-resolve/preconnect.
+5. [x] Add startup/network/process measurement tooling and regression automation.
+6. [x] Add baseline + PGO build paths and comparison automation.
+7. [x] Add self-hosted full Chromium build/package/runtime workflow.
+8. [ ] Execute the complete Chromium build on a capable Windows runner.
+9. [ ] Execute non-interactive and interactive runtime compatibility/performance gates on that binary.
+10. [ ] Keep only optimizations proven beneficial by the runtime measurements.
 
 ## Architecture
 
 - [x] C++ / full Chromium native Windows browser base.
 - [x] WebView2/CEF/Electron excluded.
 - [x] Chromium Stable version/revision pinned.
-- [x] Nautrix downstream product/network layer kept separately from the huge upstream source tree.
+- [x] Nautrix downstream product/network layer separate from upstream source tree.
 - [x] Chromium end-user optimization baseline (`is_official_build=true`).
 - [x] Google Chrome branding/private browser OAuth credentials disabled.
 
 ## Browser foundation
 
-- [x] depot_tools/gclient bootstrap flow.
-- [x] GN + autoninja Windows x64 build flow.
+- [x] depot_tools/gclient bootstrap.
+- [x] GN + autoninja Windows x64 baseline build flow.
+- [x] GN + autoninja Windows x64 PGO build flow.
+- [x] Chromium default PGO profile checkout automation.
+- [x] Browser + `mini_installer` build targets.
 - [x] Nautrix branding and Windows product/profile identity.
-- [x] CI validates downstream layer and exact pinned upstream patch anchors.
-- [ ] Full Chromium x64 build on a runner/workstation meeting upstream disk/RAM requirements.
+- [x] CI validation against exact pinned upstream patch anchors.
+- [x] Self-hosted full-build workflow and compact installer/tool packaging.
+- [ ] Full Chromium x64 build executed on a machine meeting upstream disk/RAM requirements.
 - [ ] Interactive runtime validation of the produced browser.
 
 ## Browser functionality inherited from Chromium — runtime gates
@@ -45,6 +50,8 @@
 - [ ] WebRTC / WebGL / WebGPU.
 - [ ] PWA support.
 
+These remain unchecked because source inheritance alone is not a runtime test.
+
 ## Google web authentication — runtime gates
 
 - [x] Standalone Chromium architecture instead of embedded user-agent.
@@ -54,51 +61,56 @@
 - [ ] 2FA and WebAuthn/passkeys.
 - [ ] Session persistence after restart.
 
-Official Chrome Sync remains outside the implementation target because Google restricts the private Chrome services used by third-party Chromium-derived browsers.
+Official Chrome Sync remains outside the target because Google restricts the private Chrome services used by third-party Chromium-derived browsers.
 
 ## Custom/automatic DNS
 
 - [x] Browser-local override; does not silently modify Windows DNS.
-- [x] Native Windows launcher.
+- [x] Native Windows DNS/latency launcher.
 - [x] `system`, `manual`, and `automatic` modes.
 - [x] Custom nameservers and custom DoH endpoint.
-- [x] Real DNS query benchmark instead of ICMP ping.
+- [x] Native Win32 settings/benchmark application.
+- [x] Real DNS queries instead of ICMP ping.
+- [x] A + AAAA benchmark and IPv4/IPv6 resolver endpoints.
 - [x] Median, p95, jitter, timeout/failure scoring.
 - [x] Parallel provider benchmark.
+- [x] Direct DoH HTTPS-path measurement.
+- [x] Priority-host DNS-answer + TCP/443 IPv4/IPv6 route scoring.
 - [x] Winner cache per network signature.
 - [x] Retest after active adapter/address/system-DNS changes.
-- [x] Hysteresis before resolver switching.
+- [x] Switching hysteresis.
 - [x] Chromium Network Service `DnsConfigOverrides` integration.
-- [x] DoH/Secure DNS retained for selected resolver.
-- [x] Exact pinned Chromium `network_service.cc` patch validation in CI.
-- [x] Priority-host DNS-answer + TCP/443 route score.
-- [x] A + AAAA queries and separate IPv4/IPv6 route measurements.
-- [x] Direct DoH HTTPS-path measurement in the selector.
-- [x] CSV metrics output.
-- [x] Native Win32 DNS settings/benchmark application.
-- [ ] Validate overrides and DoH using the first full Chromium runtime + NetLog.
+- [x] Secure DNS/DoH retained for selected resolver.
+- [x] Exact pinned Chromium `network_service.cc` validation in hosted CI.
+- [x] CSV metrics/state output.
+- [ ] Verify actual DNS/DoH events with the complete Chromium binary's NetLog.
 
 ## Performance / low latency
 
 - [x] Chromium production optimization level.
-- [x] Preserve browser/network/GPU/renderer process isolation.
+- [x] Preserve browser/network/GPU/renderer isolation.
 - [x] Keep QUIC/HTTP3, DNS cache, socket pooling and GPU enabled by default.
 - [x] Configurable Happy Eyeballs V3.
-- [x] DNS/route benchmarking outside renderer/DOM paths.
-- [x] Priority-host TCP/443 IPv4/IPv6 measurements.
-- [x] NetLog capture on demand, disabled by default.
-- [x] Startup trace on demand, disabled by default.
-- [x] Browser process creation timing log.
-- [x] Configurable non-realtime browser root process priority.
-- [x] Priority preconnect configuration exported to Chromium.
-- [ ] Patch Chromium preconnect manager path for Nautrix priority origins and validate against pinned upstream source.
-- [ ] Add automated runtime resource profiler (CPU/RAM/process tree).
-- [ ] Add headless navigation/startup regression suite.
-- [ ] Add NetLog summarizer for DNS/connect/TLS/QUIC/request timings.
-- [ ] Add baseline vs PGO benchmark workflow/scripts.
-- [ ] Add full Chromium PGO build path.
-- [ ] Validate cold/warm start, page/navigation, input-to-frame, DNS/TCP/TLS/QUIC/TTFB and CPU/RAM/GPU on actual Nautrix binary.
+- [x] Configurable non-realtime root browser process priority.
+- [x] Priority origins exported by launcher.
+- [x] Priority origins patched into Chromium's existing `PreconnectManager` path.
+- [x] Exact pinned preconnect source patch validation in hosted CI.
+- [x] NetLog capture on demand; off during normal browsing.
+- [x] Startup/input trace capture on demand; off during normal browsing.
+- [x] NetLog duration summarizer for host resolution/connect/SSL/QUIC/HTTP/request events.
+- [x] Startup/latency trace summarizer.
+- [x] Browser process-creation timing log.
+- [x] CPU/RAM/process-tree profiler.
+- [x] Headless navigation regression benchmark.
+- [x] Chromium NetLog priority-site probe.
+- [x] Baseline-vs-PGO benchmark script/workflow.
+- [x] Self-hosted runtime-regression workflow.
+- [ ] Measure cold/warm startup on actual Nautrix browser.
+- [ ] Measure DNS/TCP/TLS/QUIC/response-start timings on actual Nautrix browser.
+- [ ] Measure CPU/RAM/GPU behavior on actual Nautrix browser.
+- [ ] Capture real user-input-to-frame latency using the diagnostic trace on an interactive Windows session.
+- [ ] Compare baseline vs PGO on the same hardware/network and select the winner.
 
 ## Final hard gate
 
-The final items require a complete Chromium checkout/build and interactive Windows runtime. Hosted lightweight CI cannot truthfully mark those runtime gates complete. The repository must provide an automated self-hosted build/test path so the remaining gates run as soon as a capable Windows runner is attached.
+All remaining unchecked items require a complete Chromium-derived browser binary and, for Google/passkey/input checks, an interactive Windows user session. The repository now contains the automated build, runtime, NetLog, trace, resource-profile and PGO-comparison paths; hosted lightweight CI cannot truthfully substitute for those runtime tests.

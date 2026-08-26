@@ -24,6 +24,10 @@ jobs:
         shell: pwsh
         run: python -m compileall -q tools
 
+      - name: Parse PowerShell tooling
+        shell: pwsh
+        run: ./tools/validate_powershell.ps1
+
       - name: Validate Nautrix Chromium layer
         shell: pwsh
         run: python tools/validate_nautrix.py
