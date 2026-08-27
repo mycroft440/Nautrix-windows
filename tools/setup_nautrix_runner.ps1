@@ -210,6 +210,79 @@ function Wait-RunnerOnline([string]$Gh) {
     throw "The runner service was started, but GitHub did not report '$RunnerName' online with label '$RunnerLabel' within 60 seconds."
 }
 
+function Get-RunnerServiceName([string]$Root) {
+    $serviceConfig = Join-Path $Root '.service'
+    if (-not (Test-Path -LiteralPath $serviceConfig)) {
+        return $null
+    }
+
+    $serviceName = (Get-Content -Raw -LiteralPath $serviceConfig).Trim()
+    if ([string]::IsNullOrWhiteSpace($serviceName)) {
+        return $null
+    }
+    return $serviceName
+}
+
+function Start-RunnerWindowsService([string]$Root) {
+    # Modern Windows runners configured with --runasservice manage the service directly.
+    # Do not depend on svc.cmd; the runner stores the Windows service name in .service.
+    $serviceName = Get-RunnerServiceName $Root
+    if ([string]::IsNullOrWhiteSpace($serviceName)) {
+        return $false
+    }
+
+    $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+    if (-not $service) {
+        Write-Warning "Runner service '$serviceName' is recorded in .service but is not installed."
+        return $false
+    }
+
+    if ($service.Status -ne [System.ServiceProcess.ServiceControllerStatus]::Running) {
+        Write-Step "Starting the GitHub Actions Runner Windows service '$serviceName'..."
+        Start-Service -Name $serviceName
+        $service.WaitForStatus([System.ServiceProcess.ServiceControllerStatus]::Running, [TimeSpan]::FromSeconds(30))
+        $service.Refresh()
+    }
+
+    Write-Host "[Nautrix] Runner Windows service: $serviceName ($($service.Status))"
+    return $service.Status -eq [System.ServiceProcess.ServiceControllerStatus]::Running
+}
+
+function Remove-StaleRunnerWindowsService([string]$Root) {
+    $serviceName = Get-RunnerServiceName $Root
+    if ([string]::IsNullOrWhiteSpace($serviceName)) {
+        return
+    }
+
+    $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+    if (-not $service) {
+        return
+    }
+
+    Write-Step "Removing stale runner Windows service '$serviceName' before repair..."
+    if ($service.Status -ne [System.ServiceProcess.ServiceControllerStatus]::Stopped) {
+        Stop-Service -Name $serviceName -Force -ErrorAction SilentlyContinue
+        try {
+            $service.WaitForStatus([System.ServiceProcess.ServiceControllerStatus]::Stopped, [TimeSpan]::FromSeconds(20))
+        } catch {
+            Write-Warning "Runner service '$serviceName' did not report Stopped before deletion; continuing repair."
+        }
+    }
+
+    & sc.exe delete $serviceName | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not remove stale runner service '$serviceName' (sc.exe exit $LASTEXITCODE)."
+    }
+
+    for ($attempt = 1; $attempt -le 20; $attempt++) {
+        if (-not (Get-Service -Name $serviceName -ErrorAction SilentlyContinue)) {
+            return
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    throw "Runner service '$serviceName' is still registered after deletion. Reboot Windows and run the installer again."
+}
+
 if (-not [Environment]::Is64BitOperatingSystem) {
     throw 'The Nautrix Chromium build requires 64-bit Windows.'
 }
@@ -238,24 +311,26 @@ Ensure-CppBuildTools
 Ensure-GitHubAuthentication $gh
 
 if (Test-Path -LiteralPath (Join-Path $runnerRoot '.runner')) {
-    Write-Step "An existing runner configuration was found at $runnerRoot. Starting its service..."
-    Push-Location $runnerRoot
+    Write-Step "An existing runner configuration was found at $runnerRoot. Checking its Windows service..."
+    $existingReady = $false
     try {
-        if (-not (Test-Path -LiteralPath '.\svc.cmd')) {
-            throw 'Existing runner configuration is missing svc.cmd.'
+        $existingReady = Start-RunnerWindowsService $runnerRoot
+        if ($existingReady) {
+            Wait-RunnerOnline $gh
         }
-        & .\svc.cmd start
-        if ($LASTEXITCODE -ne 0) {
-            throw "Existing runner service failed to start (exit $LASTEXITCODE)."
-        }
-        & .\svc.cmd status
-    } finally {
-        Pop-Location
+    } catch {
+        Write-Warning "Existing runner could not be resumed: $($_.Exception.Message)"
+        $existingReady = $false
     }
-    Wait-RunnerOnline $gh
-    Write-Host "`n[Nautrix] Runner is installed and running as a Windows service." -ForegroundColor Green
-    Write-Host '[Nautrix] The latest queued Full Chromium Build can now start automatically.' -ForegroundColor Green
-    exit 0
+
+    if ($existingReady) {
+        Write-Host "`n[Nautrix] Runner is installed and running as a Windows service." -ForegroundColor Green
+        Write-Host '[Nautrix] The latest queued Full Chromium Build can now start automatically.' -ForegroundColor Green
+        exit 0
+    }
+
+    Write-Warning 'The existing runner configuration is incomplete or its Windows service is broken. Nautrix will repair it automatically.'
+    Remove-StaleRunnerWindowsService $runnerRoot
 }
 
 if (Test-Path -LiteralPath $runnerRoot) {
@@ -292,16 +367,13 @@ try {
         if ($LASTEXITCODE -ne 0) {
             throw "GitHub Actions Runner configuration failed with exit code $LASTEXITCODE."
         }
-
-        Write-Step 'Starting the GitHub Actions Runner Windows service...'
-        & .\svc.cmd start
-        if ($LASTEXITCODE -ne 0) {
-            throw "Runner service failed to start with exit code $LASTEXITCODE."
-        }
-        Start-Sleep -Seconds 3
-        & .\svc.cmd status
     } finally {
         Pop-Location
+    }
+
+    Write-Step 'Starting the GitHub Actions Runner Windows service if it is not already running...'
+    if (-not (Start-RunnerWindowsService $runnerRoot)) {
+        throw 'Runner configuration completed, but the Windows service was not created or could not be started.'
     }
 
     Wait-RunnerOnline $gh
