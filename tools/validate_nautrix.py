@@ -68,8 +68,13 @@ def _validate_google_browser_credentials_disabled() -> None:
         "refs/remotes/origin/main",
         "checkout --force --detach",
         "fetch --no-tags origin %REVISION%",
+        ":FetchPinnedRevisionWithRetry",
+        "FETCH_ATTEMPT!/5",
+        ":SyncChromiumWithRetry",
+        "SYNC_ATTEMPT!/4",
+        "Partial checkout detected; continuing with resumable gclient sync.",
     ):
-        assert token in bootstrap, f"Interrupted Chromium checkout repair is missing: {token}"
+        assert token in bootstrap, f"Interrupted/transient Chromium checkout recovery is missing: {token}"
 
 
 def _validate_dns_and_latency_config() -> None:
