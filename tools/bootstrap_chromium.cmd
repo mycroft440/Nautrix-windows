@@ -105,6 +105,10 @@ echo [Nautrix] Applying intent-triggered trading spare-renderer warmup...
 python "%ROOT%\tools\apply_trading_warmup.py" "%SRC%"
 if errorlevel 1 exit /b 1
 
+echo [Nautrix] Applying adaptive Memory Saver/background/preconnect budgets...
+python "%ROOT%\tools\apply_resource_efficiency.py" "%SRC%"
+if errorlevel 1 exit /b 1
+
 echo [Nautrix] Chromium source is ready.
 exit /b 0
 
