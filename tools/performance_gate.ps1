@@ -20,7 +20,10 @@ if (($BaselineProfile -and -not $CandidateProfile) -or ($CandidateProfile -and -
 }
 
 function Get-PctChange([double]$Baseline, [double]$Candidate) {
-    if ($Baseline -eq 0) { return if ($Candidate -eq 0) { 0.0 } else { [double]::PositiveInfinity } }
+    if ($Baseline -eq 0) {
+        if ($Candidate -eq 0) { return 0.0 }
+        return [double]::PositiveInfinity
+    }
     return (($Candidate - $Baseline) / $Baseline) * 100.0
 }
 
