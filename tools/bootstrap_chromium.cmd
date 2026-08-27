@@ -89,6 +89,10 @@ echo [Nautrix] Applying native Windows installer/shell integration...
 python "%ROOT%\tools\apply_installer_integration.py" "%SRC%"
 if errorlevel 1 exit /b 1
 
+echo [Nautrix] Adding lightweight blocker to the native installer payload...
+python "%ROOT%\tools\apply_blocker_installer.py" "%SRC%"
+if errorlevel 1 exit /b 1
+
 echo [Nautrix] Applying priority-preconnect/keepalive layer...
 python "%ROOT%\tools\apply_preconnect.py" "%SRC%"
 if errorlevel 1 exit /b 1
