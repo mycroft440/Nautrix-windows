@@ -34,7 +34,7 @@ function Refresh-Path {
 function Require-Winget {
     $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
     if (-not $winget) {
-        throw 'winget.exe was not found. Install Microsoft App Installer from the Microsoft Store, then run this script again.'
+        throw 'winget.exe was not found. Install Microsoft App Installer from the Microsoft Store, then run this installer again.'
     }
     return $winget.Source
 }
@@ -60,6 +60,21 @@ function Ensure-Git {
     }
     $git = Get-Command git.exe -ErrorAction Stop
     Write-Host "[Nautrix] Git: $($git.Source)"
+}
+
+function Enable-LongPathSupport {
+    Write-Step 'Enabling Windows/Git long-path support required by Chromium...'
+    New-ItemProperty `
+        -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' `
+        -Name 'LongPathsEnabled' `
+        -PropertyType DWord `
+        -Value 1 `
+        -Force | Out-Null
+    & git.exe config --system core.longpaths true
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Could not enable Git long-path support.'
+    }
+    Write-Host '[Nautrix] Long-path support: enabled'
 }
 
 function Ensure-GitHubCli {
@@ -173,6 +188,28 @@ function Get-RunnerArchive([string]$Destination) {
     return $archive
 }
 
+function Wait-RunnerOnline([string]$Gh) {
+    Write-Step "Waiting for runner '$RunnerName' to become online in GitHub..."
+    for ($attempt = 1; $attempt -le 30; $attempt++) {
+        $json = & $Gh api "repos/$Repository/actions/runners?per_page=100" 2>$null
+        if ($LASTEXITCODE -eq 0 -and $json) {
+            $payload = $json | ConvertFrom-Json
+            $runner = $payload.runners |
+                Where-Object { $_.name -eq $RunnerName } |
+                Select-Object -First 1
+            if ($runner) {
+                $labels = @($runner.labels | ForEach-Object { $_.name })
+                if ($runner.status -eq 'online' -and $labels -contains $RunnerLabel) {
+                    Write-Host "[Nautrix] Runner is online: $RunnerName"
+                    return
+                }
+            }
+        }
+        Start-Sleep -Seconds 2
+    }
+    throw "The runner service was started, but GitHub did not report '$RunnerName' online with label '$RunnerLabel' within 60 seconds."
+}
+
 if (-not [Environment]::Is64BitOperatingSystem) {
     throw 'The Nautrix Chromium build requires 64-bit Windows.'
 }
@@ -185,7 +222,7 @@ if (-not (Test-Administrator)) {
 }
 
 Write-Host '============================================================' -ForegroundColor DarkCyan
-Write-Host ' Nautrix Windows - one-click GitHub Actions runner bootstrap ' -ForegroundColor Cyan
+Write-Host ' Nautrix Windows - GitHub Actions runner setup ' -ForegroundColor Cyan
 Write-Host '============================================================' -ForegroundColor DarkCyan
 Write-Host "Repository : $Repository"
 Write-Host "Runner name: $RunnerName"
@@ -195,6 +232,7 @@ $drive = Select-RunnerDrive
 $runnerRoot = Join-Path "$drive\" 'actions-runner\nautrix-chromium'
 
 Ensure-Git
+Enable-LongPathSupport
 $gh = Ensure-GitHubCli
 Ensure-CppBuildTools
 Ensure-GitHubAuthentication $gh
@@ -214,7 +252,9 @@ if (Test-Path -LiteralPath (Join-Path $runnerRoot '.runner')) {
     } finally {
         Pop-Location
     }
-    Write-Host "`n[Nautrix] Runner is configured. The queued Full Chromium Build should be picked up automatically." -ForegroundColor Green
+    Wait-RunnerOnline $gh
+    Write-Host "`n[Nautrix] Runner is installed and running as a Windows service." -ForegroundColor Green
+    Write-Host '[Nautrix] The latest queued Full Chromium Build can now start automatically.' -ForegroundColor Green
     exit 0
 }
 
@@ -263,6 +303,8 @@ try {
     } finally {
         Pop-Location
     }
+
+    Wait-RunnerOnline $gh
 } finally {
     if (Test-Path -LiteralPath $tempRoot) {
         Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
