@@ -60,15 +60,21 @@ jobs:
             --onefile `
             --windowed `
             --name NautrixRunnerInstaller `
+            --version-file tools/runner_installer/version_info.txt `
             --add-data "tools/setup_nautrix_runner.ps1;tools" `
             tools/runner_installer/nautrix_runner_installer.py
 
       - name: Smoke test packaged installer
         shell: pwsh
         run: |
-          & .\dist\NautrixRunnerInstaller.exe --self-test
-          if ($LASTEXITCODE -ne 0) {
-            throw "Packaged installer self-test failed with exit code $LASTEXITCODE"
+          $process = Start-Process `
+            -FilePath .\dist\NautrixRunnerInstaller.exe `
+            -ArgumentList '--self-test' `
+            -Wait `
+            -PassThru `
+            -NoNewWindow
+          if ($process.ExitCode -ne 0) {
+            throw "Packaged installer self-test failed with exit code $($process.ExitCode)"
           }
           $item = Get-Item .\dist\NautrixRunnerInstaller.exe
           Write-Host ("Installer size: {0:N0} bytes" -f $item.Length)
