@@ -32,9 +32,11 @@ for ($r = 1; $r -le $Runs; $r++) {
         $profile = Join-Path $env:TEMP "nautrix-bench-$PID-$r-$([guid]::NewGuid().ToString('N'))"
         try {
             $sw = [Diagnostics.Stopwatch]::StartNew()
+            # Preserve Chromium's production GPU/compositor path. --disable-gpu
+            # is intentionally not used here because it moves rendering work to
+            # CPU and can invalidate end-user latency/resource comparisons.
             $p = Start-Process -FilePath $Browser -ArgumentList @(
                 '--headless=new',
-                '--disable-gpu',
                 "--user-data-dir=$profile",
                 '--dump-dom',
                 $url
