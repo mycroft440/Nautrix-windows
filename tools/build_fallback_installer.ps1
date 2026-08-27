@@ -115,9 +115,11 @@ Fallback snapshot position: $($snapshot.Position)
 "@
 $notice | Set-Content -LiteralPath (Join-Path $payload 'FALLBACK-NOTICE.txt') -Encoding utf8
 
-$actualBrowserVersion = (& (Join-Path $payload 'chrome.exe') --version 2>&1 | Out-String).Trim()
-if (-not $actualBrowserVersion) { throw 'Could not read the fallback Chromium browser version.' }
-Write-Host "[Nautrix] Fallback browser: $actualBrowserVersion"
+$browserVersionInfo = (Get-Item -LiteralPath (Join-Path $payload 'chrome.exe')).VersionInfo
+$actualBrowserVersion = $browserVersionInfo.ProductVersion
+if (-not $actualBrowserVersion) { $actualBrowserVersion = $browserVersionInfo.FileVersion }
+if (-not $actualBrowserVersion) { throw 'Could not read the fallback Chromium PE version metadata.' }
+Write-Host "[Nautrix] Fallback browser version: $actualBrowserVersion"
 
 $makensis = Get-Command makensis.exe -ErrorAction SilentlyContinue
 if (-not $makensis) { $makensis = Get-Command makensis -ErrorAction SilentlyContinue }
