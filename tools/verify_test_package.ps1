@@ -49,7 +49,6 @@ $required = @(
     'NautrixSetup.exe',
     'NautrixLauncher.exe',
     'NautrixNetworkSettings.exe',
-    'initial_preferences.json',
     'Install-Nautrix-Test.ps1',
     'Install-Nautrix-Test.cmd',
     'Start-Nautrix.cmd',
@@ -140,9 +139,12 @@ foreach ($relative in $expectedHashes.Keys) {
     }
 }
 
-$preferences = Get-Content -LiteralPath (Join-Path $PackageDir 'initial_preferences.json') -Raw | ConvertFrom-Json
-if (-not $preferences.distribution.do_not_create_any_shortcuts) {
-    throw 'Initial preferences must suppress direct Chromium shortcuts.'
+$metadata = Get-Content -LiteralPath (Join-Path $PackageDir 'package.json') -Raw | ConvertFrom-Json
+if ($metadata.installer -ne 'NautrixSetup.exe' -or $metadata.install_command -ne 'NautrixSetup.exe') {
+    throw 'Package metadata must identify NautrixSetup.exe as the standalone installer.'
+}
+if ($metadata.automated_install_test -ne 'Install-Nautrix-Test.cmd') {
+    throw 'Package metadata must identify the automated native-install test harness.'
 }
 
 $runner = Get-Content -LiteralPath (Join-Path $PackageDir 'Start-Nautrix.cmd') -Raw
@@ -151,10 +153,25 @@ if ($runner -notmatch 'NautrixLauncher.exe' -or $runner -notmatch '--browser=' -
 }
 
 $installer = Get-Content -LiteralPath (Join-Path $PackageDir 'Install-Nautrix-Test.ps1') -Raw
-foreach ($token in ('NautrixSetup.exe', 'initial_preferences.json', 'NautrixLauncher.exe', 'CreateShortcut', 'UninstallAfterTest')) {
+foreach ($token in (
+    'NautrixSetup.exe',
+    'Assert-InstalledPayload',
+    'Get-NautrixProgIdCommands',
+    'NautrixHTM',
+    '--single-argument',
+    'Assert-NativeShortcuts',
+    'Wait-NautrixUninstalled',
+    'UninstallAfterTest'
+)) {
     if ($installer -notmatch [regex]::Escape($token)) {
-        throw "Test-package installer is missing: $token"
+        throw "Native-install test harness is missing: $token"
     }
 }
+if ($installer -match '--installerdata=') {
+    throw 'Native-install test harness must not inject installerdata; NautrixSetup.exe must stand alone.'
+}
+if ($installer -match '\bCopy-Item\b') {
+    throw 'Native-install test harness must not copy payload after setup; the installer must own it.'
+}
 
-Write-Host "[Nautrix] Test package verified: $PackageDir"
+Write-Host "[Nautrix] Native-installer test package verified: $PackageDir"
