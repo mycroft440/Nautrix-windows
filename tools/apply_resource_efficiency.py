@@ -41,7 +41,6 @@ def patch_prefs(source_root: Path) -> None:
         )
 
     helper = r'''
-
 // NAUTRIX_RESOURCE_EFFICIENCY_PREFS
 int NautrixMemorySaverState() {
   return NautrixTradingPolicyEnabled("NAUTRIX_MEMORY_SAVER_ENABLED")
@@ -70,7 +69,9 @@ int NautrixMemorySaverDiscardMinutes() {
           environment->GetVar("NAUTRIX_MEMORY_SAVER_DISCARD_MINUTES")) {
     base::StringToInt(*value, &minutes);
   }
-  return std::max(15, std::min(minutes, 1440));
+  if (minutes < 15) return 15;
+  if (minutes > 1440) return 1440;
+  return minutes;
 }
 
 base::Value::List GetNautrixCriticalTradingSites() {
@@ -88,56 +89,45 @@ base::Value::List GetNautrixCriticalTradingSites() {
   }
   return sites;
 }
-'''
-    anchor = "\n}  // namespace\n// NAUTRIX_TRADING_PRIORITY_END\n"
-    text = replace_once(text, anchor, helper + anchor, path)
 
-    old_lifecycle = '''base::Value::List GetNautrixLifecycleProtectedSites() {
+'''
+    lifecycle_anchor = "base::Value::List GetNautrixLifecycleProtectedSites() {\n"
+    text = replace_once(text, lifecycle_anchor, helper + lifecycle_anchor, path)
+
+    text = replace_once(
+        text,
+        '''base::Value::List GetNautrixLifecycleProtectedSites() {
   if (!NautrixTradingPolicyEnabled("NAUTRIX_FREEZING_PROTECTION")) {
     return {};
   }
   return GetNautrixTradingSites();
 }
-'''
-    new_lifecycle = '''base::Value::List GetNautrixLifecycleProtectedSites() {
+''',
+        '''base::Value::List GetNautrixLifecycleProtectedSites() {
   if (!NautrixTradingPolicyEnabled("NAUTRIX_FREEZING_PROTECTION")) {
     return {};
   }
-  // Visible/recent pages are already protected by Chromium. Keep permanent
-  // discard/freezing exceptions only for sites explicitly declared critical.
+  // Chromium already protects visible/recent pages. Permanent exceptions are
+  // reserved for explicitly critical sites so idle trading tabs can be freed.
   return GetNautrixCriticalTradingSites();
 }
-'''
-    text = replace_once(text, old_lifecycle, new_lifecycle, path)
+''',
+        path,
+    )
 
-    old_foreground = '''  return GetNautrixTradingSites();
-}
-
-}  // namespace
-// NAUTRIX_TRADING_PRIORITY_END
-'''
-    new_foreground = '''  return GetNautrixCriticalTradingSites();
-}
-'''
-    # The resource helper now sits between this function and the namespace end.
-    if old_foreground in text:
-        text = text.replace(old_foreground, new_foreground + helper + anchor, 1)
-    else:
-        # Normal path after helper insertion: replace the single return inside
-        # GetNautrixForegroundPrioritySites without touching the earlier helper.
-        function_start = text.find("base::Value::List GetNautrixForegroundPrioritySites()")
-        function_end = text.find("\n}\n", function_start)
-        if function_start < 0 or function_end < 0:
-            raise RuntimeError(f"{path}: foreground priority helper not found")
-        section = text[function_start : function_end + 3]
-        if "return GetNautrixTradingSites();" not in section:
-            raise RuntimeError(f"{path}: foreground priority return anchor not found")
-        section = section.replace(
-            "return GetNautrixTradingSites();",
-            "return GetNautrixCriticalTradingSites();",
-            1,
-        )
-        text = text[:function_start] + section + text[function_end + 3 :]
+    function_start = text.find("base::Value::List GetNautrixForegroundPrioritySites()")
+    function_end = text.find("\n}\n", function_start)
+    if function_start < 0 or function_end < 0:
+        raise RuntimeError(f"{path}: foreground priority helper not found")
+    section = text[function_start : function_end + 3]
+    if "return GetNautrixTradingSites();" not in section:
+        raise RuntimeError(f"{path}: foreground priority return anchor not found")
+    section = section.replace(
+        "return GetNautrixTradingSites();",
+        "return GetNautrixCriticalTradingSites();",
+        1,
+    )
+    text = text[:function_start] + section + text[function_end + 3 :]
 
     text = replace_once(
         text,
@@ -194,17 +184,21 @@ def patch_scheduler(source_root: Path) -> None:
         path,
     )
 
-    text = text.replace(
-        '''  if (nautrix_low_latency_page_ &&
+    old_bypass = '''  if (nautrix_low_latency_page_ &&
       NautrixSchedulerEnvEnabled("NAUTRIX_SELECTIVE_THROTTLING_BYPASS")) {
-''',
-        '''  if (nautrix_low_latency_page_ &&
+'''
+    new_bypass = '''  if (nautrix_low_latency_page_ &&
       NautrixSchedulerEnvEnabled("NAUTRIX_SELECTIVE_THROTTLING_BYPASS") &&
       (parent_page_scheduler_->IsPageVisible() ||
        (NautrixSchedulerEnvEnabled("NAUTRIX_BACKGROUND_CONNECTION_BYPASS") &&
         has_active_connection_))) {
-''',
-    )
+'''
+    bypass_count = text.count(old_bypass)
+    if bypass_count != 2:
+        raise RuntimeError(
+            f"{path}: expected two trading throttling bypass anchors, got {bypass_count}"
+        )
+    text = text.replace(old_bypass, new_bypass)
 
     text = replace_once(
         text,
@@ -218,12 +212,14 @@ def patch_scheduler(source_root: Path) -> None:
         path,
     )
 
-    old_visible = '''  UMA_HISTOGRAM_BOOLEAN("RendererScheduler.IPC.FrameVisibility", frame_visible);
+    text = replace_once(
+        text,
+        '''  UMA_HISTOGRAM_BOOLEAN("RendererScheduler.IPC.FrameVisibility", frame_visible);
   frame_visible_ = frame_visible;
   UpdatePolicy();
 }
-'''
-    new_visible = '''  UMA_HISTOGRAM_BOOLEAN("RendererScheduler.IPC.FrameVisibility", frame_visible);
+''',
+        '''  UMA_HISTOGRAM_BOOLEAN("RendererScheduler.IPC.FrameVisibility", frame_visible);
   frame_visible_ = frame_visible;
 #if BUILDFLAG(IS_WIN)
   if (frame_type_ == FrameType::kMainFrame && nautrix_low_latency_page_ &&
@@ -240,8 +236,9 @@ def patch_scheduler(source_root: Path) -> None:
 #endif
   UpdatePolicy();
 }
-'''
-    text = replace_once(text, old_visible, new_visible, path)
+''',
+        path,
+    )
 
     text = replace_once(
         text,
