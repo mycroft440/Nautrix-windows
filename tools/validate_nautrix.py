@@ -62,6 +62,15 @@ def _validate_google_browser_credentials_disabled() -> None:
     ):
         assert f'set "{variable}="' in build, f"{variable} must be cleared during production build"
 
+    bootstrap = (REPO / "tools/bootstrap_chromium.cmd").read_text(encoding="utf-8")
+    for token in (
+        "rev-parse --verify HEAD",
+        "refs/remotes/origin/main",
+        "checkout --force --detach",
+        "fetch --no-tags origin %REVISION%",
+    ):
+        assert token in bootstrap, f"Interrupted Chromium checkout repair is missing: {token}"
+
 
 def _validate_dns_and_latency_config() -> None:
     dns = (REPO / "config/dns.ini").read_text(encoding="utf-8")

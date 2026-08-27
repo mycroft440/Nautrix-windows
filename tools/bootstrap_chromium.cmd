@@ -51,6 +51,24 @@ if not exist "%WORK%\.gclient" (
   popd
 )
 
+if exist "%SRC%\.git" (
+  git -C "%SRC%" rev-parse --verify HEAD >nul 2>&1
+  if errorlevel 1 (
+    echo [Nautrix] Repairing an interrupted initial Chromium checkout...
+    git -C "%SRC%" show-ref --verify --quiet refs/remotes/origin/main
+    if not errorlevel 1 (
+      git -C "%SRC%" checkout --force --detach refs/remotes/origin/main
+    )
+    git -C "%SRC%" rev-parse --verify HEAD >nul 2>&1
+    if errorlevel 1 (
+      git -C "%SRC%" fetch --no-tags origin %REVISION%
+      if errorlevel 1 exit /b 1
+      git -C "%SRC%" checkout --force --detach FETCH_HEAD
+    )
+    if errorlevel 1 exit /b 1
+  )
+)
+
 pushd "%WORK%"
 echo [Nautrix] Synchronizing the pinned Chromium revision...
 call gclient sync -D --force --reset --revision src@%REVISION%
