@@ -11,9 +11,21 @@ on:
         options:
           - baseline
           - pgo
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/full-build-request'
 
 permissions:
   contents: read
+
+concurrency:
+  group: nautrix-full-chromium-build
+  cancel-in-progress: true
+
+env:
+  BUILD_VARIANT: ${{ inputs.variant || 'baseline' }}
 
 jobs:
   build:
@@ -27,22 +39,29 @@ jobs:
           # reused by this dedicated runner between baseline and PGO runs.
           clean: false
 
+      - name: Confirm requested revision
+        shell: pwsh
+        run: |
+          Write-Host "[Nautrix] Building repository commit $env:GITHUB_SHA"
+          Write-Host "[Nautrix] Variant: $env:BUILD_VARIANT"
+          Get-Content .github/full-build-request -ErrorAction SilentlyContinue
+
       - name: Build native tools
         shell: cmd
         run: tools\build_launcher.cmd
 
       - name: Build Chromium baseline
-        if: ${{ inputs.variant == 'baseline' }}
+        if: ${{ env.BUILD_VARIANT == 'baseline' }}
         shell: cmd
         run: tools\build_chromium.cmd
 
       - name: Build Chromium PGO
-        if: ${{ inputs.variant == 'pgo' }}
+        if: ${{ env.BUILD_VARIANT == 'pgo' }}
         shell: cmd
         run: tools\build_chromium_pgo.cmd
 
       - name: Runtime smoke baseline
-        if: ${{ inputs.variant == 'baseline' }}
+        if: ${{ env.BUILD_VARIANT == 'baseline' }}
         shell: pwsh
         run: >-
           ./tools/runtime_smoke.ps1
@@ -51,7 +70,7 @@ jobs:
           -ConfigDir "$PWD/config"
 
       - name: Runtime smoke PGO
-        if: ${{ inputs.variant == 'pgo' }}
+        if: ${{ env.BUILD_VARIANT == 'pgo' }}
         shell: pwsh
         run: >-
           ./tools/runtime_smoke.ps1
@@ -62,13 +81,14 @@ jobs:
       - name: Package deliverables
         shell: pwsh
         run: |
-          $out = if ('${{ inputs.variant }}' -eq 'pgo') { '.chromium-work/src/out/NautrixPGO' } else { '.chromium-work/src/out/Nautrix' }
-          $package = 'dist/Nautrix-${{ inputs.variant }}-x64-test'
+          $variant = $env:BUILD_VARIANT
+          $out = if ($variant -eq 'pgo') { '.chromium-work/src/out/NautrixPGO' } else { '.chromium-work/src/out/Nautrix' }
+          $package = "dist/Nautrix-$variant-x64-test"
           if (Test-Path -LiteralPath $package) {
             Remove-Item -LiteralPath $package -Recurse -Force
           }
           ./tools/package_test_installer.ps1 `
-            -Variant '${{ inputs.variant }}' `
+            -Variant $variant `
             -ChromiumOutput $out `
             -OutputDir $package
           ./tools/verify_test_package.ps1 `
@@ -76,15 +96,14 @@ jobs:
 
       - name: Install, launch, and uninstall test package
         shell: pwsh
-        run: >-
-          ./tools/install_test_package.ps1
-          -PackageDir 'dist/Nautrix-${{ inputs.variant }}-x64-test'
-          -UninstallAfterTest
+        run: |
+          $package = "dist/Nautrix-$env:BUILD_VARIANT-x64-test"
+          ./tools/install_test_package.ps1 -PackageDir $package -UninstallAfterTest
 
       - name: Upload deliverables
         uses: actions/upload-artifact@v4
         with:
-          name: Nautrix-${{ inputs.variant }}-x64
-          path: dist/Nautrix-${{ inputs.variant }}-x64-test/
+          name: Nautrix-${{ env.BUILD_VARIANT }}-x64
+          path: dist/Nautrix-${{ env.BUILD_VARIANT }}-x64-test/
           compression-level: 6
           if-no-files-found: error
