@@ -15,6 +15,7 @@ APP_TITLE = "Nautrix Build Runner"
 REPOSITORY = "mycroft440/Nautrix-windows"
 ACTIONS_URL = f"https://github.com/{REPOSITORY}/actions/workflows/full-chromium-build.yml"
 RUNNERS_URL = f"https://github.com/{REPOSITORY}/settings/actions/runners"
+AUTO_START_DELAY_MS = 450
 
 
 def resource_path(relative: str) -> Path:
@@ -33,6 +34,20 @@ def powershell_path() -> str:
     windir = os.environ.get("WINDIR", r"C:\Windows")
     candidate = Path(windir) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
     return str(candidate if candidate.exists() else "powershell.exe")
+
+
+def enable_dpi_awareness() -> None:
+    if os.name != "nt":
+        return
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)
+        return
+    except Exception:
+        pass
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
 
 
 def is_admin() -> bool:
@@ -74,6 +89,7 @@ def run_self_test() -> int:
     if not script.exists():
         print(f"embedded setup script missing: {script}", file=sys.stderr)
         return 2
+
     text = script.read_text(encoding="utf-8-sig")
     required = [
         "mycroft440/Nautrix-windows",
@@ -89,6 +105,7 @@ def run_self_test() -> int:
     if missing:
         print("setup script missing markers: " + ", ".join(missing), file=sys.stderr)
         return 3
+
     escaped = str(script).replace("'", "''")
     command = [
         powershell_path(),
@@ -98,11 +115,22 @@ def run_self_test() -> int:
         "-Command",
         f"$null=[scriptblock]::Create((Get-Content -Raw -LiteralPath '{escaped}')); exit 0",
     ]
-    completed = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    completed = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
     if completed.returncode != 0:
         print(completed.stdout, file=sys.stderr)
         print(completed.stderr, file=sys.stderr)
         return completed.returncode
+
+    if AUTO_START_DELAY_MS <= 0:
+        print("auto-start delay must be positive", file=sys.stderr)
+        return 4
+
     print("NautrixRunnerInstaller self-test passed")
     return 0
 
@@ -122,10 +150,11 @@ class InstallerApp:
         self.events: queue.Queue[tuple[str, object]] = queue.Queue()
         self.worker: threading.Thread | None = None
         self.running = False
+        self.started_once = False
 
         root.title(APP_TITLE)
-        root.geometry("820x610")
-        root.minsize(760, 560)
+        root.geometry("860x650")
+        root.minsize(760, 580)
         root.configure(bg=self.BG)
         root.protocol("WM_DELETE_WINDOW", self.on_close)
 
@@ -143,12 +172,16 @@ class InstallerApp:
             darkcolor=self.ACCENT,
             thickness=12,
         )
+
+        root.grid_columnconfigure(0, weight=1)
+        root.grid_rowconfigure(3, weight=1)
+
         self._build_ui()
         self.root.after(100, self._drain_events)
 
     def _build_ui(self) -> None:
         header = tk.Frame(self.root, bg=self.BG)
-        header.pack(fill="x", padx=34, pady=(30, 16))
+        header.grid(row=0, column=0, sticky="ew", padx=34, pady=(24, 12))
         tk.Label(
             header,
             text="N",
@@ -175,44 +208,44 @@ class InstallerApp:
             bg=self.BG,
         ).pack(anchor="w", pady=(4, 0))
 
-        card = tk.Frame(self.root, bg=self.PANEL, highlightthickness=1, highlightbackground="#223040")
-        card.pack(fill="x", padx=34, pady=(0, 14))
+        info = tk.Frame(self.root, bg=self.PANEL, highlightthickness=1, highlightbackground="#223040")
+        info.grid(row=1, column=0, sticky="ew", padx=34, pady=(0, 12))
         tk.Label(
-            card,
+            info,
             text=(
-                "O instalador verifica espaço em disco, Git, GitHub CLI, suporte a caminhos longos e "
-                "Visual Studio C++ Build Tools; depois registra este computador como runner "
+                "A configuração começa automaticamente. O instalador verifica espaço em disco, Git, GitHub CLI, "
+                "caminhos longos e Visual Studio C++ Build Tools; depois registra este computador como runner "
                 "‘nautrix-chromium’, inicia o serviço e confirma que ele ficou online no GitHub."
             ),
-            wraplength=730,
+            wraplength=760,
             justify="left",
             font=("Segoe UI", 10),
             fg=self.TEXT,
             bg=self.PANEL,
-        ).pack(anchor="w", padx=20, pady=(18, 8))
+        ).pack(anchor="w", padx=20, pady=(15, 7))
         tk.Label(
-            card,
+            info,
             text=(
-                "Pode ser necessário autorizar o GitHub no navegador. O instalador usa um token de registro "
-                "temporário e não salva esse token no aplicativo."
+                "Pode ser necessário autorizar o GitHub no navegador. O token de registro é temporário "
+                "e não é salvo pelo aplicativo."
             ),
-            wraplength=730,
+            wraplength=760,
             justify="left",
             font=("Segoe UI", 9),
             fg=self.MUTED,
             bg=self.PANEL,
-        ).pack(anchor="w", padx=20, pady=(0, 18))
+        ).pack(anchor="w", padx=20, pady=(0, 15))
 
         status_card = tk.Frame(self.root, bg=self.PANEL, highlightthickness=1, highlightbackground="#223040")
-        status_card.pack(fill="x", padx=34, pady=(0, 14))
+        status_card.grid(row=2, column=0, sticky="ew", padx=34, pady=(0, 12))
         self.status = tk.Label(
             status_card,
-            text="Pronto para configurar",
+            text="Preparando para iniciar automaticamente...",
             font=("Segoe UI Semibold", 11),
             fg=self.TEXT,
             bg=self.PANEL,
         )
-        self.status.pack(anchor="w", padx=20, pady=(15, 8))
+        self.status.pack(anchor="w", padx=20, pady=(13, 7))
         self.progress = ttk.Progressbar(
             status_card,
             style="Nautrix.Horizontal.TProgressbar",
@@ -221,20 +254,22 @@ class InstallerApp:
             maximum=100,
             value=0,
         )
-        self.progress.pack(fill="x", padx=20, pady=(0, 16))
+        self.progress.pack(fill="x", padx=20, pady=(0, 14))
 
         log_card = tk.Frame(self.root, bg=self.PANEL, highlightthickness=1, highlightbackground="#223040")
-        log_card.pack(fill="both", expand=True, padx=34, pady=(0, 14))
+        log_card.grid(row=3, column=0, sticky="nsew", padx=34, pady=(0, 12))
+        log_card.grid_columnconfigure(0, weight=1)
+        log_card.grid_rowconfigure(1, weight=1)
         tk.Label(
             log_card,
             text="Detalhes da instalação",
             font=("Segoe UI Semibold", 10),
             fg=self.TEXT,
             bg=self.PANEL,
-        ).pack(anchor="w", padx=16, pady=(12, 6))
+        ).grid(row=0, column=0, sticky="w", padx=16, pady=(10, 6))
         self.log = tk.Text(
             log_card,
-            height=12,
+            height=8,
             bg="#0d131b",
             fg="#cbd7e4",
             insertbackground=self.TEXT,
@@ -245,17 +280,33 @@ class InstallerApp:
             wrap="word",
             state="disabled",
         )
-        self.log.pack(fill="both", expand=True, padx=16, pady=(0, 16))
+        self.log.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 14))
 
         buttons = tk.Frame(self.root, bg=self.BG)
-        buttons.pack(fill="x", padx=34, pady=(0, 28))
-        self.install_button = self._button(buttons, "Instalar e ativar runner", self.start_install, self.ACCENT, self.BG)
+        buttons.grid(row=4, column=0, sticky="ew", padx=34, pady=(0, 22))
+        self.install_button = self._button(
+            buttons,
+            "Reiniciar instalação",
+            self.start_install,
+            self.ACCENT,
+            self.BG,
+        )
         self.install_button.pack(side="left")
         self.actions_button = self._button(
-            buttons, "Abrir Full Chromium Build", lambda: webbrowser.open(ACTIONS_URL), self.PANEL_2, self.TEXT
+            buttons,
+            "Abrir Full Chromium Build",
+            lambda: webbrowser.open(ACTIONS_URL),
+            self.PANEL_2,
+            self.TEXT,
         )
         self.actions_button.pack(side="left", padx=(10, 0))
-        self.runners_button = self._button(buttons, "Ver runners", lambda: webbrowser.open(RUNNERS_URL), self.PANEL_2, self.TEXT)
+        self.runners_button = self._button(
+            buttons,
+            "Ver runners",
+            lambda: webbrowser.open(RUNNERS_URL),
+            self.PANEL_2,
+            self.TEXT,
+        )
         self.runners_button.pack(side="left", padx=(10, 0))
         self.close_button = self._button(buttons, "Fechar", self.on_close, self.PANEL_2, self.TEXT)
         self.close_button.pack(side="right")
@@ -271,8 +322,8 @@ class InstallerApp:
             activeforeground=fg,
             relief="flat",
             bd=0,
-            padx=16,
-            pady=9,
+            padx=14,
+            pady=8,
             font=("Segoe UI Semibold", 9),
             cursor="hand2",
         )
@@ -315,21 +366,36 @@ class InstallerApp:
     def start_install(self) -> None:
         if self.running:
             return
+
         script = embedded_setup_script()
         if not script.exists():
-            messagebox.showerror(APP_TITLE, f"O componente de instalação não foi encontrado:\n{script}")
+            self._fail(f"O componente de instalação não foi encontrado:\n{script}")
             return
+
+        if self.started_once:
+            self._append_log("[Nautrix] Reiniciando a configuração solicitada pelo usuário.")
+        else:
+            self.started_once = True
+            self._append_log("[Nautrix] Início automático da configuração.")
+
         self.running = True
         self.install_button.configure(state="disabled")
         self.close_button.configure(state="disabled")
         self._set_status("Iniciando configuração...", 2)
-        self._append_log(f"Componente: {script}")
+        self._append_log(f"[Nautrix] Componente: {script}")
         self.worker = threading.Thread(target=self._install_worker, args=(script,), daemon=True)
         self.worker.start()
 
     def _install_worker(self, script: Path) -> None:
         creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-        command = [powershell_path(), "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script)]
+        command = [
+            powershell_path(),
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(script),
+        ]
         try:
             process = subprocess.Popen(
                 command,
@@ -372,6 +438,8 @@ class InstallerApp:
     def _finish(self, exit_code: int) -> None:
         self.running = False
         self.close_button.configure(state="normal")
+        self.install_button.configure(state="normal")
+
         if exit_code == 0:
             self._set_status("Runner instalado e conectado. O build pode começar.", 100, self.SUCCESS)
             self._append_log("[Nautrix] Instalação finalizada com sucesso.")
@@ -380,10 +448,18 @@ class InstallerApp:
                 "O runner nautrix-chromium foi instalado, iniciado e confirmado como online.\n\n"
                 "O Full Chromium Build mais recente deve ser assumido automaticamente pelo GitHub Actions.",
             )
-        else:
-            self.install_button.configure(state="normal")
-            self._set_status(f"Falha na configuração (código {exit_code})", int(self.progress["value"]), self.ERROR)
-            messagebox.showerror(APP_TITLE, "A configuração não foi concluída. Veja o log para identificar a etapa que falhou.")
+            return
+
+        self._set_status(
+            f"Falha na configuração (código {exit_code})",
+            int(self.progress["value"]),
+            self.ERROR,
+        )
+        self._append_log(f"[ERRO] PowerShell encerrou com código {exit_code}.")
+        messagebox.showerror(
+            APP_TITLE,
+            "A configuração não foi concluída. Veja o log para identificar a etapa que falhou.",
+        )
 
     def _fail(self, message: str) -> None:
         self.running = False
@@ -395,7 +471,10 @@ class InstallerApp:
 
     def on_close(self) -> None:
         if self.running:
-            messagebox.showwarning(APP_TITLE, "A configuração está em andamento. Aguarde a conclusão antes de fechar.")
+            messagebox.showwarning(
+                APP_TITLE,
+                "A configuração está em andamento. Aguarde a conclusão antes de fechar.",
+            )
             return
         self.root.destroy()
 
@@ -408,8 +487,11 @@ def main() -> int:
         return 1
     if not elevate_self():
         return 0 if "--elevated" not in sys.argv else 5
+
+    enable_dpi_awareness()
     root = tk.Tk()
-    InstallerApp(root)
+    app = InstallerApp(root)
+    root.after(AUTO_START_DELAY_MS, app.start_install)
     root.mainloop()
     return 0
 
