@@ -23,6 +23,7 @@ on:
           - pgo
 
 permissions:
+  actions: write
   contents: read
 
 concurrency:
@@ -30,7 +31,50 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  supersede-stale:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Cancel stale Full Chromium Build runs
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const currentRunId = context.runId;
+            const currentSha = context.sha;
+            const branch = context.ref.startsWith('refs/heads/')
+              ? context.ref.substring('refs/heads/'.length)
+              : undefined;
+
+            const runs = await github.paginate(
+              github.rest.actions.listWorkflowRuns,
+              {
+                owner,
+                repo,
+                workflow_id: 'full-chromium-build.yml',
+                branch,
+                per_page: 100,
+              }
+            );
+
+            for (const run of runs) {
+              if (run.id === currentRunId || run.head_sha === currentSha) continue;
+              if (!['queued', 'in_progress', 'pending', 'waiting', 'requested'].includes(run.status)) continue;
+
+              core.info(`Canceling stale Full Chromium Build #${run.run_number} (${run.id}) at ${run.head_sha}`);
+              try {
+                await github.rest.actions.cancelWorkflowRun({ owner, repo, run_id: run.id });
+              } catch (error) {
+                if (error.status === 409) {
+                  core.info(`Run ${run.id} is no longer cancelable; continuing.`);
+                  continue;
+                }
+                throw error;
+              }
+            }
+
   build:
+    needs: supersede-stale
     runs-on: [self-hosted, Windows, X64, nautrix-chromium]
     timeout-minutes: 720
     env:
