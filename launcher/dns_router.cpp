@@ -8,13 +8,16 @@
 #include <algorithm>
 #include <chrono>
 #include <cctype>
+#include <condition_variable>
 #include <cstdint>
+#include <cstring>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
-#include <future>
 #include <iomanip>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <sstream>
@@ -53,6 +56,13 @@ struct InternetHandle {
     ~InternetHandle() { if (value) WinHttpCloseHandle(value); }
     InternetHandle(const InternetHandle&) = delete;
     InternetHandle& operator=(const InternetHandle&) = delete;
+};
+
+struct RaceState {
+    std::mutex mutex;
+    std::condition_variable ready;
+    std::optional<Answer> first_answer;
+    std::size_t remaining = 0;
 };
 
 std::string Trim(std::string value) {
@@ -278,19 +288,26 @@ std::optional<Answer> QueryProvider(const Provider& provider,
 std::optional<Answer> RaceProviders(const std::vector<Provider>& providers,
                                     const std::vector<std::uint8_t>& query,
                                     int timeout_ms) {
-    std::vector<std::future<std::optional<Answer>>> futures;
-    futures.reserve(providers.size());
+    if (providers.empty()) return std::nullopt;
+    auto state = std::make_shared<RaceState>();
+    state->remaining = providers.size();
     for (const Provider& provider : providers) {
-        futures.emplace_back(std::async(std::launch::async, [provider, query, timeout_ms] {
-            return QueryProvider(provider, query, timeout_ms);
-        }));
+        std::thread([state, provider, query, timeout_ms] {
+            auto result = QueryProvider(provider, query, timeout_ms);
+            {
+                std::lock_guard lock(state->mutex);
+                if (!state->first_answer && result) state->first_answer = std::move(result);
+                if (state->remaining > 0) --state->remaining;
+            }
+            state->ready.notify_one();
+        }).detach();
     }
-    std::optional<Answer> best;
-    for (auto& future : futures) {
-        auto result = future.get();
-        if (result && (!best || result->elapsed_ms < best->elapsed_ms)) best = std::move(result);
-    }
-    return best;
+
+    std::unique_lock lock(state->mutex);
+    state->ready.wait_for(lock, std::chrono::milliseconds(timeout_ms * 2), [&] {
+        return state->first_answer.has_value() || state->remaining == 0;
+    });
+    return state->first_answer;
 }
 
 std::map<std::string, Route> LoadRoutes(const std::filesystem::path& path) {
@@ -331,10 +348,6 @@ const Provider* FindProvider(const std::vector<Provider>& providers, const std::
 
 std::int64_t EpochSeconds() {
     return static_cast<std::int64_t>(std::time(nullptr));
-}
-
-std::wstring Quote(const std::wstring& value) {
-    return L"\"" + value + L"\"";
 }
 
 }  // namespace
