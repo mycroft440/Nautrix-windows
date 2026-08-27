@@ -1,6 +1,7 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
+#include <shellapi.h>
 
 #include <cstdint>
 #include <filesystem>
@@ -179,7 +180,7 @@ BOOL WINAPI NautrixCreateProcessW(LPCWSTR application_name,
 #undef wmain
 #undef CreateProcessW
 
-int wmain(int argc, wchar_t** argv) {
+int NautrixLauncherMain(int argc, wchar_t** argv) {
     std::filesystem::path config_dir = nautrix_bootstrap::ExecutableDirectory() / L"config";
     size_t single_argument_index = static_cast<size_t>(argc);
     for (int i = 1; i < argc; ++i) {
@@ -223,4 +224,17 @@ int wmain(int argc, wchar_t** argv) {
     forwarded.reserve(owned.size());
     for (auto& item : owned) forwarded.push_back(item.data());
     return NautrixOriginalMain(static_cast<int>(forwarded.size()), forwarded.data());
+}
+
+int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
+    int argc = 0;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (!argv || argc <= 0) {
+        if (argv) LocalFree(argv);
+        return 1;
+    }
+
+    const int result = NautrixLauncherMain(argc, argv);
+    LocalFree(argv);
+    return result;
 }
