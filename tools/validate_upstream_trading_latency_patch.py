@@ -3,11 +3,11 @@
 
 from __future__ import annotations
 
-import base64
 import importlib.util
 import tempfile
-import urllib.request
 from pathlib import Path
+
+from upstream_fetch import fetch_gitiles_text
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -33,11 +33,12 @@ def pinned_revision() -> str:
 
 
 def fetch_text(revision: str, path: str) -> str:
-    url = f"https://chromium.googlesource.com/chromium/src/+/{revision}/{path}?format=TEXT"
-    request = urllib.request.Request(url, headers={"User-Agent": "Nautrix-latency-validator/1.0"})
-    with urllib.request.urlopen(request, timeout=60) as response:
-        encoded = response.read()
-    return base64.b64decode(encoded, validate=True).decode("utf-8")
+    return fetch_gitiles_text(
+        revision,
+        path,
+        user_agent="Nautrix-latency-validator/1.0",
+        timeout=60,
+    )
 
 
 def write_source(root: Path, path: str, content: str) -> None:
