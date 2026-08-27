@@ -123,8 +123,6 @@ bool FeatureEnabled(const std::string& mode,
         scoped.append("|").append(network_seed);
         return StableBucket(scoped, feature_name);
     }
-    // Per-origin experiments need the Chromium-side origin gate, so keep the
-    // feature available here and let the downstream patch decide per origin.
     if (mode == "ab-origin") return true;
     return false;
 }
@@ -133,7 +131,6 @@ bool StartDnsRouter(const std::filesystem::path& config_dir) {
     HANDLE ready = OpenEventW(SYNCHRONIZE, FALSE, L"Local\\NautrixDnsRouterReady");
     if (ready) {
         CloseHandle(ready);
-        SetEnvironmentVariableW(L"NAUTRIX_DNS_ROUTER_ACTIVE", L"1");
         return true;
     }
 
@@ -155,12 +152,25 @@ bool StartDnsRouter(const std::filesystem::path& config_dir) {
         ready = OpenEventW(SYNCHRONIZE, FALSE, L"Local\\NautrixDnsRouterReady");
         if (ready) {
             CloseHandle(ready);
-            SetEnvironmentVariableW(L"NAUTRIX_DNS_ROUTER_ACTIVE", L"1");
             return true;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(25));
     }
     return false;
+}
+
+std::filesystem::path PrepareRouterRuntimeConfig(const std::filesystem::path& source_config) {
+    const std::filesystem::path runtime = LocalStateDirectory() / L"runtime-config";
+    std::error_code ec;
+    std::filesystem::create_directories(runtime, ec);
+    std::filesystem::copy_file(source_config / L"latency.ini", runtime / L"latency.ini",
+                               std::filesystem::copy_options::overwrite_existing, ec);
+    std::ofstream dns(runtime / L"dns.ini", std::ios::trunc);
+    dns << "mode=manual\n"
+           "prefer_encrypted=0\n"
+           "manual_nameservers=127.0.0.1\n"
+           "manual_doh_template=\n";
+    return runtime;
 }
 
 std::vector<std::wstring> BuildInjectedArgs(const std::filesystem::path& latency_path) {
@@ -248,14 +258,29 @@ int wmain(int argc, wchar_t** argv) {
         if (arg.rfind(prefix, 0) == 0) config_dir = std::wstring(arg.substr(prefix.size()));
     }
 
-    if (nautrix_bootstrap::ReadKey(config_dir / L"latency.ini", "enable_origin_dns_router", "0") == "1") {
-        nautrix_bootstrap::StartDnsRouter(config_dir);
+    const std::filesystem::path latency_path = config_dir / L"latency.ini";
+    const auto injected_args = nautrix_bootstrap::BuildInjectedArgs(latency_path);
+    std::filesystem::path effective_config = config_dir;
+    const bool wants_router = nautrix_bootstrap::ReadKey(latency_path, "enable_origin_dns_router", "0") == "1";
+    if (wants_router && nautrix_bootstrap::StartDnsRouter(config_dir)) {
+        effective_config = nautrix_bootstrap::PrepareRouterRuntimeConfig(config_dir);
     }
 
     std::vector<std::wstring> owned;
-    owned.reserve(static_cast<size_t>(argc) + 4);
-    for (int i = 0; i < argc; ++i) owned.emplace_back(argv[i]);
-    for (auto& injected : nautrix_bootstrap::BuildInjectedArgs(config_dir / L"latency.ini")) {
+    owned.reserve(static_cast<size_t>(argc) + injected_args.size() + 2);
+    bool had_config_arg = false;
+    for (int i = 0; i < argc; ++i) {
+        constexpr std::wstring_view prefix = L"--config-dir=";
+        std::wstring item(argv[i]);
+        if (i > 0 && item.rfind(prefix, 0) == 0) {
+            item = L"--config-dir=" + effective_config.wstring();
+            had_config_arg = true;
+        }
+        owned.push_back(std::move(item));
+    }
+    if (!had_config_arg) owned.push_back(L"--config-dir=" + effective_config.wstring());
+
+    for (auto injected : injected_args) {
         bool merged_feature_switch = false;
         if (injected.rfind(L"--enable-features=", 0) == 0) {
             for (size_t i = 1; i < owned.size(); ++i) {
