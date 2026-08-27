@@ -140,6 +140,17 @@ Official Chrome Sync remains outside the target because Google restricts the pri
 - [ ] Capture real user-input-to-frame latency using the diagnostic trace on an interactive Windows session.
 - [ ] Compare baseline vs PGO on the same hardware/network and select the winner.
 
+## Self-hosted runner bootstrap
+
+- [x] Graphical Windows runner installer build workflow.
+- [x] Embedded PowerShell setup backend with UAC elevation.
+- [x] Prerequisite checks/install for Git, GitHub CLI, long paths and Visual Studio C++ Build Tools.
+- [x] GitHub runner registration, Windows service start and online-status verification backend.
+- [x] Fix DPI/window-layout bug that allowed the action buttons to be clipped below the visible window.
+- [x] Start runner installation automatically after the elevated GUI opens, without depending on a visible button.
+- [x] Corrected packaged installer compiled and passed Python, PowerShell and packaged self-tests in GitHub Actions.
+- [ ] Run the corrected installer on the target Windows machine and confirm the visible log advances through authentication, registration, service start and runner-online verification.
+
 ## Final hard gate
 
 All remaining unchecked items require a complete Chromium-derived browser binary and, for Google/passkey/input checks, an interactive Windows user session. Source/hosted CI validation proves the downstream scripts and exact pinned patch anchors; it does not substitute for compiling the entire Chromium tree or measuring the final binary on real hardware.
