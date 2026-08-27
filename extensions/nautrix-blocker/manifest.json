@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Nautrix Lightweight Blocker",
+  "version": "1.0.0",
+  "description": "Low-overhead static ad/tracker filtering for Nautrix.",
+  "minimum_chrome_version": "120",
+  "permissions": [
+    "declarativeNetRequestWithHostAccess"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "nautrix_core",
+        "enabled": true,
+        "path": "rules.json"
+      }
+    ]
+  }
+}
