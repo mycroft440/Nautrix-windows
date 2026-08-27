@@ -65,6 +65,53 @@ bool IsNautrixBrowserShortcutTarget(const base::FilePath& target) {
 '''
     text = _replace_required(text, start_menu_old, start_menu_new, str(path))
 
+    registration_old = '''  // ProgId and shell integration registrations are allowed to reside in HKCU
+  // for user-level installs, and values there have priority over values in
+  // HKLM.
+  if (confirmation_level == CONFIRM_PROGID_REGISTRATION ||
+      confirmation_level == CONFIRM_SHELL_REGISTRATION) {
+    const RegKey key_hkcu(HKEY_CURRENT_USER, reg_key.c_str(), KEY_QUERY_VALUE);
+    std::wstring hkcu_value;
+    // If |reg_key| is present in HKCU, assert that it points to |chrome_exe|.
+    // Otherwise, fall back on an HKLM lookup below.
+    if (key_hkcu.ReadValue(L"", &hkcu_value) == ERROR_SUCCESS)
+      return installer::ProgramCompare(chrome_exe).Evaluate(hkcu_value);
+  }
+
+  // Assert that |reg_key| points to |chrome_exe| in HKLM.
+  const RegKey key_hklm(HKEY_LOCAL_MACHINE, reg_key.c_str(), KEY_QUERY_VALUE);
+  std::wstring hklm_value;
+  if (key_hklm.ReadValue(L"", &hklm_value) == ERROR_SUCCESS)
+    return installer::ProgramCompare(chrome_exe).Evaluate(hklm_value);
+'''
+    registration_new = '''  // Nautrix intentionally registers the browser shell entry through its
+  // launcher so DNS/trading policy is applied for protocol and file launches.
+  const base::FilePath expected_shell_program =
+      GetNautrixLauncherCommandLine(chrome_exe).GetProgram();
+
+  // ProgId and shell integration registrations are allowed to reside in HKCU
+  // for user-level installs, and values there have priority over values in
+  // HKLM.
+  if (confirmation_level == CONFIRM_PROGID_REGISTRATION ||
+      confirmation_level == CONFIRM_SHELL_REGISTRATION) {
+    const RegKey key_hkcu(HKEY_CURRENT_USER, reg_key.c_str(), KEY_QUERY_VALUE);
+    std::wstring hkcu_value;
+    // If |reg_key| is present in HKCU, assert that it points to the Nautrix
+    // launcher. Otherwise, fall back on an HKLM lookup below.
+    if (key_hkcu.ReadValue(L"", &hkcu_value) == ERROR_SUCCESS)
+      return installer::ProgramCompare(expected_shell_program).Evaluate(
+          hkcu_value);
+  }
+
+  // Assert that |reg_key| points to the Nautrix launcher in HKLM.
+  const RegKey key_hklm(HKEY_LOCAL_MACHINE, reg_key.c_str(), KEY_QUERY_VALUE);
+  std::wstring hklm_value;
+  if (key_hklm.ReadValue(L"", &hklm_value) == ERROR_SUCCESS)
+    return installer::ProgramCompare(expected_shell_program).Evaluate(
+        hklm_value);
+'''
+    text = _replace_required(text, registration_old, registration_new, str(path))
+
     shortcut_old = '''  base_operation = TranslateShortcutOperation(operation);
   base_properties = TranslateShortcutProperties(properties);
   shortcut_path = *chosen_path;
