@@ -4,10 +4,10 @@ project(NautrixLauncher LANGUAGES CXX)
 
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-add_executable(NautrixLauncher nautrix_launcher.cpp)
+add_executable(NautrixLauncher WIN32 nautrix_launcher.cpp)
 target_compile_features(NautrixLauncher PRIVATE cxx_std_23)
 target_compile_definitions(NautrixLauncher PRIVATE UNICODE _UNICODE)
-target_link_libraries(NautrixLauncher PRIVATE ws2_32 iphlpapi winhttp)
+target_link_libraries(NautrixLauncher PRIVATE ws2_32 iphlpapi winhttp shell32)
 
 add_executable(NautrixNetworkSettings WIN32 network_settings.cpp)
 target_compile_features(NautrixNetworkSettings PRIVATE cxx_std_23)
