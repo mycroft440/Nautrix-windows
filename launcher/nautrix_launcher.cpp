@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -125,25 +126,85 @@ std::vector<std::wstring> BuildInjectedArgs(const std::filesystem::path& latency
     return {std::move(value)};
 }
 
+std::optional<std::wstring> ExtractShellSingleArgument() {
+    const wchar_t* raw = GetCommandLineW();
+    if (!raw) return std::nullopt;
+    constexpr std::wstring_view marker = L" --single-argument ";
+    const std::wstring_view command(raw);
+    const size_t position = command.find(marker);
+    if (position == std::wstring_view::npos) return std::nullopt;
+    return std::wstring(command.substr(position + marker.size()));
+}
+
+std::optional<std::wstring> g_shell_single_argument;
+
+BOOL WINAPI NautrixCreateProcessW(LPCWSTR application_name,
+                                  LPWSTR command_line,
+                                  LPSECURITY_ATTRIBUTES process_attributes,
+                                  LPSECURITY_ATTRIBUTES thread_attributes,
+                                  BOOL inherit_handles,
+                                  DWORD creation_flags,
+                                  LPVOID environment,
+                                  LPCWSTR current_directory,
+                                  LPSTARTUPINFOW startup_info,
+                                  LPPROCESS_INFORMATION process_information) {
+    if (!g_shell_single_argument.has_value()) {
+        return ::CreateProcessW(application_name, command_line, process_attributes,
+                                thread_attributes, inherit_handles, creation_flags,
+                                environment, current_directory, startup_info,
+                                process_information);
+    }
+
+    std::wstring rebuilt = command_line ? command_line : L"";
+    rebuilt += L" --single-argument";
+    if (!g_shell_single_argument->empty()) {
+        rebuilt.push_back(L' ');
+        rebuilt += *g_shell_single_argument;
+    }
+    std::vector<wchar_t> mutable_command(rebuilt.begin(), rebuilt.end());
+    mutable_command.push_back(L'\0');
+    return ::CreateProcessW(application_name, mutable_command.data(), process_attributes,
+                            thread_attributes, inherit_handles, creation_flags,
+                            environment, current_directory, startup_info,
+                            process_information);
+}
+
 }  // namespace nautrix_bootstrap
 
 #include <cstring>
 
+#define CreateProcessW nautrix_bootstrap::NautrixCreateProcessW
 #define wmain NautrixOriginalMain
 #include "nautrix_launcher_impl.inc"
 #undef wmain
+#undef CreateProcessW
 
 int wmain(int argc, wchar_t** argv) {
     std::filesystem::path config_dir = nautrix_bootstrap::ExecutableDirectory() / L"config";
+    size_t single_argument_index = static_cast<size_t>(argc);
     for (int i = 1; i < argc; ++i) {
         constexpr std::wstring_view prefix = L"--config-dir=";
         std::wstring_view arg(argv[i]);
+        if (arg == L"--single-argument") {
+            single_argument_index = static_cast<size_t>(i);
+            break;
+        }
         if (arg.rfind(prefix, 0) == 0) config_dir = std::wstring(arg.substr(prefix.size()));
+    }
+
+    nautrix_bootstrap::g_shell_single_argument = nautrix_bootstrap::ExtractShellSingleArgument();
+    if (single_argument_index < static_cast<size_t>(argc) &&
+        !nautrix_bootstrap::g_shell_single_argument.has_value()) {
+        // Never forward a shell marker whose raw argument could not be recovered;
+        // doing so would allow later injected switches to become part of the URL.
+        return 2;
     }
 
     std::vector<std::wstring> owned;
     owned.reserve(static_cast<size_t>(argc) + 4);
-    for (int i = 0; i < argc; ++i) owned.emplace_back(argv[i]);
+    const size_t copy_count = std::min(single_argument_index, static_cast<size_t>(argc));
+    for (size_t i = 0; i < copy_count; ++i) owned.emplace_back(argv[i]);
+
     for (auto& injected : nautrix_bootstrap::BuildInjectedArgs(config_dir / L"latency.ini")) {
         bool merged_feature_switch = false;
         if (injected.rfind(L"--enable-features=", 0) == 0) {
