@@ -1,0 +1,84 @@
+name: Fallback Windows Installer
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/fallback-windows-build.yml'
+      - 'installer/fallback/**'
+      - 'tools/build_fallback_installer.ps1'
+      - 'tools/test_fallback_installer.ps1'
+      - 'launcher/**'
+      - 'config/**'
+      - 'chromium/VERSION'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/fallback-windows-build.yml'
+      - 'installer/fallback/**'
+      - 'tools/build_fallback_installer.ps1'
+      - 'tools/test_fallback_installer.ps1'
+      - 'launcher/**'
+      - 'config/**'
+      - 'chromium/VERSION'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nautrix-fallback-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout Nautrix
+        uses: actions/checkout@v5
+
+      - name: Parse PowerShell tooling
+        shell: pwsh
+        run: ./tools/validate_powershell.ps1
+
+      - name: Build native Nautrix tools
+        shell: cmd
+        run: tools\build_launcher.cmd
+
+      - name: Install NSIS
+        shell: pwsh
+        run: choco install nsis -y --no-progress
+
+      - name: Build fallback installer
+        shell: pwsh
+        run: ./tools/build_fallback_installer.ps1
+
+      - name: Verify fallback checksums
+        shell: pwsh
+        run: |
+          Push-Location dist/fallback
+          try {
+            foreach ($line in Get-Content SHA256SUMS.txt) {
+              if ($line -notmatch '^(?<hash>[A-F0-9]{64}) \*(?<name>.+)$') { throw "Invalid checksum line: $line" }
+              if ((Get-FileHash -LiteralPath $Matches.name -Algorithm SHA256).Hash -ne $Matches.hash) {
+                throw "Checksum mismatch: $($Matches.name)"
+              }
+            }
+          } finally {
+            Pop-Location
+          }
+
+      - name: Install, launch, register, and uninstall fallback
+        shell: pwsh
+        run: ./tools/test_fallback_installer.ps1 -Setup ./dist/fallback/NautrixFallbackSetup.exe
+
+      - name: Upload fallback installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Nautrix-Windows-Fallback-x64
+          path: dist/fallback/
+          compression-level: 0
+          if-no-files-found: error
