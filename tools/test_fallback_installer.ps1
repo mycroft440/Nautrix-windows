@@ -90,11 +90,11 @@ foreach ($shortcutPath in @($desktopShortcut, $startShortcut)) {
     }
 }
 
-$version = (& $browser --version 2>&1 | Out-String).Trim()
-if (-not $version -or $version -notmatch 'Chromium') {
-    throw "Installed fallback browser did not report a Chromium version: $version"
-}
-Write-Host "[Nautrix] Installed fallback browser: $version"
+$browserVersionInfo = (Get-Item -LiteralPath $browser).VersionInfo
+$version = $browserVersionInfo.ProductVersion
+if (-not $version) { $version = $browserVersionInfo.FileVersion }
+if (-not $version) { throw 'Installed fallback browser has no PE version metadata.' }
+Write-Host "[Nautrix] Installed fallback browser version: $version"
 
 $existingIds = @(Get-NautrixProcesses | Select-Object -ExpandProperty Id)
 $launch = Start-Process -FilePath $launcher -ArgumentList @(
