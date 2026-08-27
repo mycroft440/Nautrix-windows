@@ -20,6 +20,9 @@ if not exist "%OUT%" mkdir "%OUT%"
 copy /Y "%ROOT%\chromium\args\Release.gn" "%OUT%\args.gn" >nul
 if errorlevel 1 exit /b 1
 
+call "%ROOT%\tools\stage_installer_payload.cmd" "%OUT%"
+if errorlevel 1 exit /b 1
+
 pushd "%SRC%"
 echo [Nautrix] Generating Chromium build files...
 call gn gen out\Nautrix
@@ -29,7 +32,7 @@ if errorlevel 1 (
 )
 
 set "NINJA_SUMMARIZE_BUILD=1"
-echo [Nautrix] Building browser and Windows installer...
+echo [Nautrix] Building browser and self-contained Windows installer...
 call autoninja -C out\Nautrix chrome mini_installer
 if errorlevel 1 (
   popd
@@ -45,8 +48,13 @@ if not exist "%OUT%\mini_installer.exe" (
   echo [Nautrix] Build finished but mini_installer.exe was not found.
   exit /b 1
 )
+if not exist "%OUT%\NautrixLauncher.exe" (
+  echo [Nautrix] Build finished but NautrixLauncher.exe installer payload was not found.
+  exit /b 1
+)
 
 echo [Nautrix] Baseline build completed successfully.
 echo [Nautrix] Browser: %OUT%\chrome.exe
 echo [Nautrix] Installer: %OUT%\mini_installer.exe
+echo [Nautrix] Installer payload: native launcher + network settings + configuration
 exit /b 0
