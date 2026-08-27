@@ -1,18 +1,35 @@
-# Installing a Nautrix test package
+# Installing and validating Nautrix on Windows
 
-The test package contains Chromium's native Windows installer as `NautrixSetup.exe`, together with the Nautrix launcher and its existing configuration.
+`NautrixSetup.exe` is the standalone native Windows installer produced from Chromium's `mini_installer` target. The installer archive itself contains the Nautrix browser, `NautrixLauncher.exe`, `NautrixNetworkSettings.exe`, and the DNS/latency configuration required by the launcher.
 
-1. Extract the complete test-package directory; do not move only the setup executable.
-2. Run `Install-Nautrix-Test.cmd`. It verifies the complete package before installation, runs Chromium's `NautrixSetup.exe`, deploys the launcher and existing configuration alongside the installed browser, and creates Desktop and Start-menu Nautrix shortcuts targeting the launcher.
-3. Launch the browser through either of those Nautrix shortcuts or `Start-Nautrix.cmd`. All supported test shortcuts start the installed browser through `NautrixLauncher.exe` and the co-located configuration.
-4. Use `NautrixNetworkSettings.exe` from the installed Nautrix application directory when the existing settings UI is needed.
-5. Execute the relevant checks in `RUNTIME_CHECKLIST.md` before approving the build.
+## Normal installation
 
-The package is intentionally test-oriented. It includes a payload SHA-256/byte-size manifest and a SHA-256 list that also covers the manifest itself. It is unsigned, so Windows SmartScreen may require an explicit tester decision. The package does not modify Windows DNS, NIC, or other network settings; it does install browser files and create the two user shortcuts described above.
+1. Run `NautrixSetup.exe`.
+2. Launch Nautrix from a shortcut created by the installer, or from Windows after selecting Nautrix as the handler/default browser.
+3. Use `NautrixNetworkSettings.exe` from the installed Nautrix application directory when the network settings UI is needed.
 
-The installer suppresses Chromium's native Desktop, Quick Launch, taskbar, and Start-menu shortcuts through `initial_preferences.json`, then creates only the two launcher shortcuts. Windows browser/protocol registrations remain Chromium installer registrations that target `chrome.exe`; they are not redirected through the launcher. Consequently, the test guarantee applies to the documented launcher shortcuts, not to default-browser or protocol-handler entrypoints.
+The normal installation does not require `Install-Nautrix-Test.cmd`, loose helper executables, or a post-install copy step. The loose helper/config files in the test artifact exist only so the automated validator can compare their SHA-256 hashes with the copies installed from inside `NautrixSetup.exe`.
 
-## Create the package after a full Chromium build
+Chromium-created browser shortcuts are patched to target `NautrixLauncher.exe` while retaining Chromium's original shortcut arguments. Browser ProgIDs such as `NautrixHTM*` are also patched to route shell launches through `NautrixLauncher.exe` with the installed `chrome.exe` and co-located configuration supplied explicitly. This keeps DNS/trading/latency policy on normal shortcut, HTTP/HTTPS, file-association, and default-browser entry paths. Installer maintenance and uninstall commands remain on Chromium's native setup/browser paths rather than being redirected through the launcher.
+
+Modern Windows controls the final user choice of default browser. Nautrix registers its browser capabilities and launcher-routed handlers; the installer does not silently take over the user's existing default-browser choice.
+
+## Automated installation gate
+
+`Install-Nautrix-Test.cmd` is a verification harness, not the installer. On a clean Windows test user it:
+
+1. verifies the artifact manifest and SHA-256 hashes;
+2. runs `NautrixSetup.exe` directly with no `installerdata` injection;
+3. confirms the installer deployed the browser, launcher, network settings, and config itself;
+4. compares the installed launcher/settings/config hashes with the build payload;
+5. confirms native Desktop/Start-menu Nautrix shortcuts route through the launcher;
+6. confirms installed `NautrixHTM*` shell commands route through the launcher and retain Chromium's single-argument shell safety path;
+7. starts the installed browser through `NautrixLauncher.exe` and observes the installed `chrome.exe` process;
+8. when `-UninstallAfterTest` is used, invokes the native uninstall registration and requires browser files, launcher payload, shortcuts, ProgIDs, and uninstall registration to disappear without manual cleanup.
+
+The package is unsigned, so Windows SmartScreen may require an explicit tester decision. Signing is a distribution/reputation requirement; it is not used to mask functional installer failures during development. Nautrix's launcher configuration remains browser-local and does not silently rewrite Windows DNS, NIC, or other system network settings.
+
+## Create and validate the package after a full Chromium build
 
 ```powershell
 tools\build_launcher.cmd
@@ -22,7 +39,9 @@ tools\install_test_package.ps1 -PackageDir .\dist\Nautrix-baseline-x64-test -Uni
 tools\measure_launcher_footprint.ps1
 ```
 
-Use `-Variant pgo` after the corresponding PGO build. `package_test_installer.ps1` requires the matching `chrome.exe` as a guard that the installer is paired with a complete browser build. `-UninstallAfterTest` is intended for a clean test user or CI runner and proves the registered uninstall path; it refuses to touch an existing Nautrix installation.
+Use `-Variant pgo` after the corresponding PGO build. `package_test_installer.ps1` requires the matching `chrome.exe` so a stale or installer-only output cannot be packaged as a valid browser build. The install/uninstall gate refuses to run over an existing Nautrix installation because its purpose is to prove the full native lifecycle from a clean state.
+
+Execute the relevant interactive checks in `RUNTIME_CHECKLIST.md` before approving a release build. Headless installation/runtime checks do not replace interactive validation of tabs, authentication, WebAuthn/passkeys, extensions, GPU paths, or real input-to-frame latency.
 
 ## Native helper footprint
 

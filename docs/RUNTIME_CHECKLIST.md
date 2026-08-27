@@ -2,6 +2,16 @@
 
 Run this only against a complete Chromium-based Nautrix build.
 
+## Native Windows installation
+- run `NautrixSetup.exe` directly on a clean Windows user
+- confirm the installed `chrome.exe`, `NautrixLauncher.exe`, `NautrixNetworkSettings.exe`, `config/dns.ini`, and `config/latency.ini` are present without post-install copying
+- confirm Desktop/Start-menu Nautrix shortcuts target `NautrixLauncher.exe`
+- confirm shortcut arguments retain `--browser=` and `--config-dir=` routing
+- confirm installed `NautrixHTM*` shell-open commands route through `NautrixLauncher.exe`
+- confirm HTTP/HTTPS/default-browser launches chosen through Windows reach the installed browser through the launcher
+- confirm installer maintenance/uninstall remains functional
+- uninstall Nautrix and confirm browser files, launcher/config payload, shortcuts, ProgIDs, and uninstall registration are removed without manual cleanup
+
 ## Core browser
 - tabs and multiple windows
 - address bar/search

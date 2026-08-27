@@ -52,8 +52,8 @@ function Get-NautrixProcessIds {
 function Stop-NautrixProcesses {
     param([Parameter(Mandatory = $true)][string]$BrowserPath)
 
-    foreach ($id in Get-NautrixProcessIds -BrowserPath $BrowserPath) {
-        Stop-Process -Id $id -Force -ErrorAction Stop
+    foreach ($processId in Get-NautrixProcessIds -BrowserPath $BrowserPath) {
+        Stop-Process -Id $processId -Force -ErrorAction Stop
     }
     for ($attempt = 0; $attempt -lt 15; ++$attempt) {
         if (@(Get-NautrixProcessIds -BrowserPath $BrowserPath).Count -eq 0) { return }
@@ -84,71 +84,127 @@ function Invoke-NautrixUninstall {
     }
 }
 
-$shortcutPaths = @(
-    (Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) 'Nautrix.lnk'),
-    (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Nautrix\Nautrix.lnk'),
-    (Join-Path $env:APPDATA 'Microsoft\Internet Explorer\Quick Launch\Nautrix.lnk'),
-    (Join-Path $env:APPDATA 'Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\Nautrix.lnk')
-)
-$createdShortcutPaths = $shortcutPaths[0..1]
-$shell = New-Object -ComObject WScript.Shell
+function Get-NautrixShortcuts {
+    $roots = @(
+        [Environment]::GetFolderPath('DesktopDirectory'),
+        (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs')
+    ) | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Container) }
 
-function Assert-NoNautrixShortcuts {
-    param([Parameter(Mandatory = $true)][string]$Stage)
-
-    foreach ($path in $shortcutPaths) {
-        if (Test-Path -LiteralPath $path -PathType Leaf) {
-            throw "Unexpected Nautrix shortcut ${Stage}: $path"
-        }
+    $paths = @()
+    foreach ($root in $roots) {
+        $paths += @(Get-ChildItem -LiteralPath $root -Filter '*.lnk' -File -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { $_.BaseName -like 'Nautrix*' } |
+            Select-Object -ExpandProperty FullName)
     }
+    return @($paths | Sort-Object -Unique)
 }
 
-function Assert-LauncherShortcuts {
-    param(
-        [Parameter(Mandatory = $true)][string]$Launcher,
-        [Parameter(Mandatory = $true)][string]$Arguments
+function Get-NautrixProgIdCommands {
+    $roots = @(
+        'HKCU:\Software\Classes',
+        'HKLM:\Software\Classes',
+        'HKLM:\Software\WOW6432Node\Classes'
     )
+    $commands = @()
+    foreach ($root in $roots) {
+        if (-not (Test-Path -LiteralPath $root)) { continue }
+        foreach ($progId in Get-ChildItem -LiteralPath $root -ErrorAction SilentlyContinue |
+                 Where-Object { $_.PSChildName -like 'NautrixHTM*' }) {
+            $commandKey = Join-Path $progId.PSPath 'shell\open\command'
+            if (-not (Test-Path -LiteralPath $commandKey)) { continue }
+            $value = (Get-Item -LiteralPath $commandKey).GetValue('')
+            if ($value) {
+                $commands += [PSCustomObject]@{
+                    ProgId = $progId.PSChildName
+                    Path = $commandKey
+                    Command = [string]$value
+                }
+            }
+        }
+    }
+    return @($commands)
+}
 
-    $expectedTarget = [IO.Path]::GetFullPath($Launcher)
-    foreach ($path in $createdShortcutPaths) {
-        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-            throw "Launcher shortcut was not created: $path"
-        }
-        $shortcut = $shell.CreateShortcut($path)
-        if ([IO.Path]::GetFullPath($shortcut.TargetPath) -ne $expectedTarget) {
-            throw "Launcher shortcut has an unexpected target: $path"
-        }
-        if ($shortcut.Arguments -ne $Arguments) {
-            throw "Launcher shortcut has unexpected arguments: $path"
-        }
+function Assert-NoExistingNautrixShellState {
+    $shortcuts = @(Get-NautrixShortcuts)
+    if ($shortcuts.Count -ne 0) {
+        throw "Unexpected Nautrix shortcut before installation: $($shortcuts[0])"
+    }
+    $commands = @(Get-NautrixProgIdCommands)
+    if ($commands.Count -ne 0) {
+        throw "Unexpected Nautrix ProgID before installation: $($commands[0].ProgId)"
     }
 }
 
-function Remove-CreatedShortcuts {
-    foreach ($path in $createdShortcutPaths) {
-        if (Test-Path -LiteralPath $path -PathType Leaf) {
-            Remove-Item -LiteralPath $path -Force
-        }
-    }
-}
-
-function Remove-InstalledAuxiliaryPayload {
+function Assert-InstalledPayload {
     param(
         [Parameter(Mandatory = $true)][string]$Launcher,
         [Parameter(Mandatory = $true)][string]$Settings,
         [Parameter(Mandatory = $true)][string]$Config
     )
 
-    # Chromium's native uninstaller does not own the Nautrix files copied in
-    # after installation, so the test-package uninstall path must remove them.
-    foreach ($path in @($Launcher, $Settings, $Config)) {
-        if (Test-Path -LiteralPath $path) {
-            Remove-Item -LiteralPath $path -Recurse -Force
+    $pairs = @(
+        @((Join-Path $PackageDir 'NautrixLauncher.exe'), $Launcher),
+        @((Join-Path $PackageDir 'NautrixNetworkSettings.exe'), $Settings),
+        @((Join-Path $PackageDir 'config\dns.ini'), (Join-Path $Config 'dns.ini')),
+        @((Join-Path $PackageDir 'config\latency.ini'), (Join-Path $Config 'latency.ini'))
+    )
+    foreach ($pair in $pairs) {
+        $source = $pair[0]
+        $installed = $pair[1]
+        if (-not (Test-Path -LiteralPath $installed -PathType Leaf)) {
+            throw "Native installer did not deploy required Nautrix payload: $installed"
+        }
+        $sourceHash = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash
+        $installedHash = (Get-FileHash -LiteralPath $installed -Algorithm SHA256).Hash
+        if ($sourceHash -ne $installedHash) {
+            throw "Installed Nautrix payload does not match package payload: $installed"
         }
     }
 }
 
-function Assert-Uninstalled {
+function Assert-NativeShortcuts {
+    param([Parameter(Mandatory = $true)][string]$Launcher)
+
+    $shortcuts = @(Get-NautrixShortcuts)
+    if ($shortcuts.Count -eq 0) {
+        throw 'Native installer did not create a Nautrix Desktop or Start-menu shortcut.'
+    }
+
+    $shell = New-Object -ComObject WScript.Shell
+    $expectedTarget = [IO.Path]::GetFullPath($Launcher)
+    foreach ($path in $shortcuts) {
+        $shortcut = $shell.CreateShortcut($path)
+        if ([IO.Path]::GetFullPath($shortcut.TargetPath) -ne $expectedTarget) {
+            throw "Native Nautrix shortcut bypasses the launcher: $path -> $($shortcut.TargetPath)"
+        }
+        if ($shortcut.Arguments -notmatch '--browser=' -or
+            $shortcut.Arguments -notmatch '--config-dir=') {
+            throw "Native Nautrix shortcut is missing launcher routing arguments: $path"
+        }
+    }
+    return $shortcuts
+}
+
+function Assert-ProgIdRouting {
+    param([Parameter(Mandatory = $true)][string]$Launcher)
+
+    $commands = @(Get-NautrixProgIdCommands)
+    if ($commands.Count -eq 0) {
+        throw 'Native installer did not register a NautrixHTM browser ProgID.'
+    }
+    $launcherPattern = [regex]::Escape([IO.Path]::GetFullPath($Launcher))
+    foreach ($entry in $commands) {
+        if ($entry.Command -notmatch $launcherPattern -or
+            $entry.Command -notmatch '--browser=' -or
+            $entry.Command -notmatch '--config-dir=' -or
+            $entry.Command -notmatch '--single-argument') {
+            throw "Nautrix ProgID bypasses launcher routing: $($entry.ProgId) -> $($entry.Command)"
+        }
+    }
+}
+
+function Wait-NautrixUninstalled {
     param(
         [Parameter(Mandatory = $true)][string]$Browser,
         [Parameter(Mandatory = $true)][string]$Launcher,
@@ -156,22 +212,24 @@ function Assert-Uninstalled {
         [Parameter(Mandatory = $true)][string]$Config
     )
 
-    if (Get-NautrixUninstallEntry) {
-        throw 'Nautrix uninstall registry entry remains after uninstall.'
-    }
-    foreach ($path in @($Browser, $Launcher, $Settings, $Config) + $shortcutPaths) {
-        if (Test-Path -LiteralPath $path) {
-            throw "Nautrix uninstall left an installed artifact behind: $path"
+    for ($attempt = 0; $attempt -lt 30; ++$attempt) {
+        $remainingFiles = @($Browser, $Launcher, $Settings, $Config) |
+            Where-Object { Test-Path -LiteralPath $_ }
+        if (-not (Get-NautrixUninstallEntry) -and
+            $remainingFiles.Count -eq 0 -and
+            @(Get-NautrixShortcuts).Count -eq 0 -and
+            @(Get-NautrixProgIdCommands).Count -eq 0) {
+            return
         }
+        Start-Sleep -Seconds 1
     }
-    Stop-NautrixProcesses -BrowserPath $Browser
+    throw 'Native Nautrix uninstall left application files, shortcuts, ProgIDs, or uninstall registration behind.'
 }
 
 $required = @(
     'NautrixSetup.exe',
     'NautrixLauncher.exe',
     'NautrixNetworkSettings.exe',
-    'initial_preferences.json',
     'config/dns.ini',
     'config/latency.ini'
 )
@@ -190,12 +248,12 @@ try {
     if ((Get-NautrixBrowserPath) -or (Get-NautrixUninstallEntry)) {
         throw 'A Nautrix installation already exists. Use a clean Windows test user before running this installation test.'
     }
-    Assert-NoNautrixShortcuts -Stage 'before installation'
+    Assert-NoExistingNautrixShellState
 
+    # Deliberately run the native setup directly. The test must not copy helper
+    # files, inject installerdata, or create shortcuts after installation.
     $setup = Join-Path $PackageDir 'NautrixSetup.exe'
-    $initialPreferences = Join-Path $PackageDir 'initial_preferences.json'
     $setupProcess = Start-Process -FilePath $setup -ArgumentList @(
-        "--installerdata=`"$initialPreferences`"",
         '--do-not-launch-chrome'
     ) -Wait -PassThru
     if ($setupProcess.ExitCode -ne 0) {
@@ -203,27 +261,14 @@ try {
     }
 
     $browser = Wait-NautrixBrowser
-    Assert-NoNautrixShortcuts -Stage 'after native installation'
     $installDir = Split-Path -Parent $browser
     $launcher = Join-Path $installDir 'NautrixLauncher.exe'
     $settings = Join-Path $installDir 'NautrixNetworkSettings.exe'
     $config = Join-Path $installDir 'config'
 
-    Copy-Item -LiteralPath (Join-Path $PackageDir 'NautrixLauncher.exe') -Destination $launcher
-    Copy-Item -LiteralPath (Join-Path $PackageDir 'NautrixNetworkSettings.exe') -Destination $settings
-    Copy-Item -Recurse -LiteralPath (Join-Path $PackageDir 'config') -Destination $config
-
-    $shortcutArguments = "--browser=`"$browser`" --config-dir=`"$config`""
-    foreach ($path in $createdShortcutPaths) {
-        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $path) | Out-Null
-        $shortcut = $shell.CreateShortcut($path)
-        $shortcut.TargetPath = $launcher
-        $shortcut.Arguments = $shortcutArguments
-        $shortcut.WorkingDirectory = $installDir
-        $shortcut.IconLocation = "$browser,0"
-        $shortcut.Save()
-    }
-    Assert-LauncherShortcuts -Launcher $launcher -Arguments $shortcutArguments
+    Assert-InstalledPayload -Launcher $launcher -Settings $settings -Config $config
+    $nativeShortcuts = @(Assert-NativeShortcuts -Launcher $launcher)
+    Assert-ProgIdRouting -Launcher $launcher
 
     $existingProcessIds = Get-NautrixProcessIds -BrowserPath $browser
     $launch = Start-Process -FilePath $launcher -ArgumentList @(
@@ -244,10 +289,12 @@ try {
         $launchedProcessIds = @(Get-NautrixProcessIds -BrowserPath $browser | Where-Object { $_ -notin $existingProcessIds })
     }
     if ($launchedProcessIds.Count -eq 0) {
-        throw 'The launcher returned success but no installed Nautrix browser process was observed.'
+        throw 'The installed Nautrix launcher returned success but no installed browser process was observed.'
     }
 
-    Write-Host "[Nautrix] Installed browser, launcher, and supported shortcuts validated at: $installDir"
+    Write-Host "[Nautrix] Standalone native installer validated at: $installDir"
+    Write-Host "[Nautrix] Native shortcuts validated: $($nativeShortcuts.Count)"
+    Write-Host "[Nautrix] Launcher-routed ProgID registration validated."
 } catch {
     $failure = $_
 } finally {
@@ -257,18 +304,12 @@ try {
         if ($cleanupBrowser) { Stop-NautrixProcesses -BrowserPath $cleanupBrowser }
 
         if ($UninstallAfterTest -and ((Get-NautrixBrowserPath) -or (Get-NautrixUninstallEntry))) {
-            try {
-                Invoke-NautrixUninstall
-            } finally {
-                # These are created by this script only after the clean-user guard passes.
-                Remove-CreatedShortcuts
-            }
+            Invoke-NautrixUninstall
             $cleanupBrowser = if ($browser) { $browser } else { Join-Path $env:LOCALAPPDATA 'Nautrix/Application/chrome.exe' }
             $cleanupLauncher = if ($launcher) { $launcher } else { Join-Path (Split-Path -Parent $cleanupBrowser) 'NautrixLauncher.exe' }
             $cleanupSettings = if ($settings) { $settings } else { Join-Path (Split-Path -Parent $cleanupBrowser) 'NautrixNetworkSettings.exe' }
             $cleanupConfig = if ($config) { $config } else { Join-Path (Split-Path -Parent $cleanupBrowser) 'config' }
-            Remove-InstalledAuxiliaryPayload -Launcher $cleanupLauncher -Settings $cleanupSettings -Config $cleanupConfig
-            Assert-Uninstalled -Browser $cleanupBrowser -Launcher $cleanupLauncher -Settings $cleanupSettings -Config $cleanupConfig
+            Wait-NautrixUninstalled -Browser $cleanupBrowser -Launcher $cleanupLauncher -Settings $cleanupSettings -Config $cleanupConfig
         }
     } catch {
         $cleanupFailure = $_

@@ -29,7 +29,6 @@ $required = @(
     (Join-Path $LauncherOutput 'NautrixNetworkSettings.exe'),
     (Join-Path $repo 'config/dns.ini'),
     (Join-Path $repo 'config/latency.ini'),
-    (Join-Path $repo 'installer/initial_preferences.json'),
     (Join-Path $repo 'tools/install_test_package.ps1'),
     (Join-Path $repo 'tools/install_test_package.cmd'),
     (Join-Path $repo 'tools/start_installed_nautrix.cmd'),
@@ -49,7 +48,6 @@ New-Item -ItemType Directory -Path $OutputDir | Out-Null
 Copy-Item -LiteralPath (Join-Path $ChromiumOutput 'mini_installer.exe') -Destination (Join-Path $OutputDir 'NautrixSetup.exe')
 Copy-Item -LiteralPath (Join-Path $LauncherOutput 'NautrixLauncher.exe') -Destination $OutputDir
 Copy-Item -LiteralPath (Join-Path $LauncherOutput 'NautrixNetworkSettings.exe') -Destination $OutputDir
-Copy-Item -LiteralPath (Join-Path $repo 'installer/initial_preferences.json') -Destination (Join-Path $OutputDir 'initial_preferences.json')
 Copy-Item -LiteralPath (Join-Path $repo 'tools/install_test_package.ps1') -Destination (Join-Path $OutputDir 'Install-Nautrix-Test.ps1')
 Copy-Item -LiteralPath (Join-Path $repo 'tools/install_test_package.cmd') -Destination (Join-Path $OutputDir 'Install-Nautrix-Test.cmd')
 Copy-Item -LiteralPath (Join-Path $repo 'tools/start_installed_nautrix.cmd') -Destination (Join-Path $OutputDir 'Start-Nautrix.cmd')
@@ -60,12 +58,13 @@ Copy-Item -Recurse -LiteralPath (Join-Path $repo 'config') -Destination (Join-Pa
 
 $version = (Get-Content -LiteralPath (Join-Path $repo 'chromium/VERSION') -Raw).Trim()
 $metadata = [ordered]@{
-    format = 'Nautrix Windows test package'
+    format = 'Nautrix Windows native-installer test package'
     variant = $Variant
     architecture = 'x64'
     chromium_version = $version
     installer = 'NautrixSetup.exe'
-    install_command = 'Install-Nautrix-Test.cmd'
+    install_command = 'NautrixSetup.exe'
+    automated_install_test = 'Install-Nautrix-Test.cmd'
     verifier = 'Verify-Nautrix-TestPackage.ps1'
     launcher = 'Start-Nautrix.cmd'
 }
@@ -82,7 +81,7 @@ $payloadFiles = @(Get-ChildItem -LiteralPath $OutputDir -Recurse -File |
         }
     })
 $manifest = [ordered]@{
-    format = 'Nautrix test package payload manifest'
+    format = 'Nautrix native-installer test package payload manifest'
     files = $payloadFiles
 }
 $manifestPath = Join-Path $OutputDir 'MANIFEST.json'
@@ -97,4 +96,4 @@ $hashes = @($payloadFiles + $manifestEntry) |
     ForEach-Object { '{0} *{1}' -f $_.sha256, $_.path }
 $hashes | Set-Content -LiteralPath (Join-Path $OutputDir 'SHA256SUMS.txt') -Encoding ascii
 
-Write-Host "[Nautrix] Test package created: $OutputDir"
+Write-Host "[Nautrix] Native-installer test package created: $OutputDir"

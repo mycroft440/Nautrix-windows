@@ -218,6 +218,8 @@ def validate_automation() -> None:
         "chrome.exe",
         "NautrixLauncher.exe",
         "NautrixNetworkSettings.exe",
+        "install_command = 'NautrixSetup.exe'",
+        "automated_install_test = 'Install-Nautrix-Test.cmd'",
         "Install-Nautrix-Test.ps1",
         "Install-Nautrix-Test.cmd",
         "Start-Nautrix.cmd",
@@ -228,6 +230,9 @@ def validate_automation() -> None:
         "Refusing to overwrite",
     ):
         assert token in package, f"test package missing: {token}"
+    assert "initial_preferences.json" not in package, (
+        "native installer package must not depend on post-install shortcut suppression"
+    )
 
     verify = read("tools/verify_test_package.ps1")
     for token in (
@@ -240,6 +245,10 @@ def validate_automation() -> None:
         "MANIFEST.json",
         "NautrixLauncher.exe",
         "Install-Nautrix-Test.ps1",
+        "Assert-InstalledPayload",
+        "Get-NautrixProgIdCommands",
+        "--single-argument",
+        "must not copy payload after setup",
     ):
         assert token in verify, f"test package verifier missing: {token}"
 
@@ -248,17 +257,27 @@ def validate_automation() -> None:
         "--do-not-launch-chrome",
         "NautrixLauncher.exe",
         "NautrixNetworkSettings.exe",
-        "CreateShortcut",
+        "Assert-InstalledPayload",
+        "Assert-NativeShortcuts",
+        "Assert-ProgIdRouting",
+        "Get-NautrixProgIdCommands",
+        "NautrixHTM",
+        "--single-argument",
         "UninstallAfterTest",
         "--force-uninstall",
-        "left an installed artifact behind",
+        "Wait-NautrixUninstalled",
         "finally",
         "Stop-NautrixProcesses",
-        "Nautrix uninstall registry entry remains",
-        "Assert-LauncherShortcuts",
         "Test-package verification failed before installation",
+        "Native installer did not deploy required Nautrix payload",
     ):
-        assert token in install, f"test installer missing: {token}"
+        assert token in install, f"native installer test missing: {token}"
+    assert "--installerdata=" not in install, (
+        "native installer test must execute NautrixSetup.exe without installerdata"
+    )
+    assert "Copy-Item" not in install, (
+        "native installer test must not repair a missing installer payload"
+    )
 
     runner = read("tools/start_installed_nautrix.cmd")
     assert "NautrixLauncher.exe" in runner
@@ -266,10 +285,6 @@ def validate_automation() -> None:
 
     install_cmd = read("tools/install_test_package.cmd")
     assert "Verify-Nautrix-TestPackage.ps1" in install_cmd
-
-    preferences = read("installer/initial_preferences.json")
-    assert "do_not_create_any_shortcuts" in preferences
-    assert "do_not_register_for_update_launch" in preferences
 
     footprint = read("tools/measure_launcher_footprint.ps1")
     assert "Total native-helper size" in footprint
@@ -290,6 +305,7 @@ def validate_automation() -> None:
 
     bootstrap = read("tools/bootstrap_chromium.cmd")
     for token in (
+        "apply_installer_integration.py",
         "apply_preconnect.py",
         "apply_trading_priority.py",
         "apply_trading_latency.py",
@@ -304,7 +320,7 @@ def main() -> int:
     validate_trading_latency_tools()
     validate_pgo()
     validate_automation()
-    print("Nautrix extended DNS/trading-latency/PGO automation checks passed.")
+    print("Nautrix extended DNS/trading-latency/PGO/installer automation checks passed.")
     return 0
 
 
