@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import re
 import tempfile
 from pathlib import Path
@@ -97,16 +98,17 @@ def _validate_dns_and_latency_config() -> None:
 
 def _validate_no_embedded_engine() -> None:
     forbidden = ("Microsoft.Web.WebView2", "#include <WebView2.h>", "CreateCoreWebView2")
-    for path in REPO.rglob("*"):
-        if not path.is_file() or ".git" in path.parts or "__pycache__" in path.parts:
-            continue
-        if path.suffix.lower() not in {".md", ".py", ".cmd", ".ps1", ".gn", ".ini", ".cpp", ".h", ".yml", ".yaml", ".txt", ""}:
-            continue
-        if path.name == "validate_nautrix.py":
-            continue
-        text = path.read_text(encoding="utf-8", errors="ignore")
-        for needle in forbidden:
-            assert needle not in text, f"Embedded-engine dependency still present in {path}: {needle}"
+    generated_or_external = {".git", ".chromium-work", ".chromium-cache", ".launcher-build", "dist", "artifacts", "__pycache__"}
+    source_extensions = {".md", ".py", ".cmd", ".ps1", ".gn", ".ini", ".cpp", ".h", ".yml", ".yaml", ".txt", ""}
+    for directory, child_directories, filenames in os.walk(REPO):
+        child_directories[:] = [name for name in child_directories if name not in generated_or_external]
+        for filename in filenames:
+            path = Path(directory, filename)
+            if path.suffix.lower() not in source_extensions or path.name == "validate_nautrix.py":
+                continue
+            text = path.read_text(encoding="utf-8", errors="ignore")
+            for needle in forbidden:
+                assert needle not in text, f"Embedded-engine dependency still present in {path}: {needle}"
 
 
 def _network_service_fixture() -> str:

@@ -1,0 +1,7 @@
+{
+  "distribution": {
+    "do_not_create_any_shortcuts": true,
+    "do_not_launch_chrome": true,
+    "do_not_register_for_update_launch": true
+  }
+}

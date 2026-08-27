@@ -97,6 +97,18 @@ The bootstrap applies the Nautrix product/DNS layer, keep-alive preconnect patch
 
 See `docs/CHROMIUM_BUILD.md` for the Windows requirements. A complete Chromium build requires a much larger disk/RAM environment than standard hosted CI.
 
+## Test installer package
+
+After a complete baseline or PGO build, create a self-contained test package with the native Windows installer, launcher, configuration, and SHA-256/size manifest:
+
+```powershell
+tools\build_launcher.cmd
+tools\package_test_installer.ps1 -Variant baseline
+tools\verify_test_package.ps1 -PackageDir .\dist\Nautrix-baseline-x64-test
+```
+
+Run `Install-Nautrix-Test.cmd` from the resulting directory. It verifies the package before invoking the native installer, then places the launcher/configuration beside the installed browser and creates the supported Desktop and Start-menu launcher shortcuts. Browser/protocol registrations remain direct Chromium installer registrations; see `docs/TEST_INSTALL.md` for that limitation, SmartScreen guidance, and the native-helper size measurement.
+
 ## Diagnostics and measurements
 
 Force a DNS retest:

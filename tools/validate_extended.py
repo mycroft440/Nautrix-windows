@@ -206,8 +206,78 @@ def validate_pgo() -> None:
 def validate_automation() -> None:
     full = read(".github/workflows/full-chromium-build.yml")
     assert "nautrix-chromium" in full
-    assert "NautrixSetup.exe" in full
     assert "runtime_smoke.ps1" in full
+    assert "package_test_installer.ps1" in full
+    assert "verify_test_package.ps1" in full
+    assert "install_test_package.ps1" in full
+    assert "UninstallAfterTest" in full
+
+    package = read("tools/package_test_installer.ps1")
+    for token in (
+        "mini_installer.exe",
+        "chrome.exe",
+        "NautrixLauncher.exe",
+        "NautrixNetworkSettings.exe",
+        "Install-Nautrix-Test.ps1",
+        "Install-Nautrix-Test.cmd",
+        "Start-Nautrix.cmd",
+        "MANIFEST.json",
+        "SHA256SUMS.txt",
+        "GetFullPath($OutputDir)",
+        "Verify-Nautrix-TestPackage.ps1",
+        "Refusing to overwrite",
+    ):
+        assert token in package, f"test package missing: {token}"
+
+    verify = read("tools/verify_test_package.ps1")
+    for token in (
+        "NautrixSetup.exe",
+        "Get-FileHash",
+        "Checksum mismatch",
+        "Size mismatch",
+        "Duplicate payload manifest entry",
+        "Package path must be relative",
+        "MANIFEST.json",
+        "NautrixLauncher.exe",
+        "Install-Nautrix-Test.ps1",
+    ):
+        assert token in verify, f"test package verifier missing: {token}"
+
+    install = read("tools/install_test_package.ps1")
+    for token in (
+        "--do-not-launch-chrome",
+        "NautrixLauncher.exe",
+        "NautrixNetworkSettings.exe",
+        "CreateShortcut",
+        "UninstallAfterTest",
+        "--force-uninstall",
+        "left an installed artifact behind",
+        "finally",
+        "Stop-NautrixProcesses",
+        "Nautrix uninstall registry entry remains",
+        "Assert-LauncherShortcuts",
+        "Test-package verification failed before installation",
+    ):
+        assert token in install, f"test installer missing: {token}"
+
+    runner = read("tools/start_installed_nautrix.cmd")
+    assert "NautrixLauncher.exe" in runner
+    assert "--browser=" in runner
+
+    install_cmd = read("tools/install_test_package.cmd")
+    assert "Verify-Nautrix-TestPackage.ps1" in install_cmd
+
+    preferences = read("installer/initial_preferences.json")
+    assert "do_not_create_any_shortcuts" in preferences
+    assert "do_not_register_for_update_launch" in preferences
+
+    footprint = read("tools/measure_launcher_footprint.ps1")
+    assert "Total native-helper size" in footprint
+
+    subprocess.run(
+        [sys.executable, str(REPO / "tools/validate_test_package.py")],
+        check=True,
+    )
 
     regression = read(".github/workflows/runtime-regression.yml")
     for token in (

@@ -22,6 +22,10 @@ jobs:
     steps:
       - name: Checkout Nautrix
         uses: actions/checkout@v5
+        with:
+          # Chromium's checkout and build outputs are intentionally ignored and
+          # reused by this dedicated runner between baseline and PGO runs.
+          clean: false
 
       - name: Build native tools
         shell: cmd
@@ -59,17 +63,28 @@ jobs:
         shell: pwsh
         run: |
           $out = if ('${{ inputs.variant }}' -eq 'pgo') { '.chromium-work/src/out/NautrixPGO' } else { '.chromium-work/src/out/Nautrix' }
-          New-Item -ItemType Directory -Force dist | Out-Null
-          Copy-Item "$out/mini_installer.exe" 'dist/NautrixSetup.exe'
-          Copy-Item '.launcher-build/Release/NautrixLauncher.exe' dist/
-          Copy-Item '.launcher-build/Release/NautrixNetworkSettings.exe' dist/
-          Copy-Item -Recurse config 'dist/config'
-          Copy-Item 'docs/RUNTIME_CHECKLIST.md' dist/
+          $package = 'dist/Nautrix-${{ inputs.variant }}-x64-test'
+          if (Test-Path -LiteralPath $package) {
+            Remove-Item -LiteralPath $package -Recurse -Force
+          }
+          ./tools/package_test_installer.ps1 `
+            -Variant '${{ inputs.variant }}' `
+            -ChromiumOutput $out `
+            -OutputDir $package
+          ./tools/verify_test_package.ps1 `
+            -PackageDir $package
+
+      - name: Install, launch, and uninstall test package
+        shell: pwsh
+        run: >-
+          ./tools/install_test_package.ps1
+          -PackageDir 'dist/Nautrix-${{ inputs.variant }}-x64-test'
+          -UninstallAfterTest
 
       - name: Upload deliverables
         uses: actions/upload-artifact@v4
         with:
           name: Nautrix-${{ inputs.variant }}-x64
-          path: dist/
+          path: dist/Nautrix-${{ inputs.variant }}-x64-test/
           compression-level: 6
           if-no-files-found: error

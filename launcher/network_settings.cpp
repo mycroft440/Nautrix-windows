@@ -190,27 +190,27 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpara
     case WM_CREATE: {
         CreateWindowW(L"STATIC", L"DNS mode", WS_CHILD | WS_VISIBLE, 20, 20, 120, 22, hwnd, nullptr, nullptr, nullptr);
         g_mode = CreateWindowW(L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL,
-                               160, 16, 260, 120, hwnd, reinterpret_cast<HMENU>(kMode), nullptr, nullptr);
+                               160, 16, 260, 120, hwnd, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kMode)), nullptr, nullptr);
         SendMessageW(g_mode, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Automatic (lowest stable score)"));
         SendMessageW(g_mode, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Manual/custom"));
         SendMessageW(g_mode, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Windows system DNS"));
         CreateWindowW(L"STATIC", L"Manual nameservers", WS_CHILD | WS_VISIBLE, 20, 62, 130, 22, hwnd, nullptr, nullptr, nullptr);
         g_nameservers = CreateWindowW(L"EDIT", L"", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
-                                      160, 58, 560, 26, hwnd, reinterpret_cast<HMENU>(kNameservers), nullptr, nullptr);
+                                      160, 58, 560, 26, hwnd, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kNameservers)), nullptr, nullptr);
         CreateWindowW(L"STATIC", L"Manual DoH", WS_CHILD | WS_VISIBLE, 20, 102, 130, 22, hwnd, nullptr, nullptr, nullptr);
         g_doh = CreateWindowW(L"EDIT", L"", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
-                              160, 98, 560, 26, hwnd, reinterpret_cast<HMENU>(kDoh), nullptr, nullptr);
+                              160, 98, 560, 26, hwnd, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kDoh)), nullptr, nullptr);
         g_encrypted = CreateWindowW(L"BUTTON", L"Prefer encrypted DNS (DoH)", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
-                                    160, 136, 260, 24, hwnd, reinterpret_cast<HMENU>(kEncrypted), nullptr, nullptr);
+                                    160, 136, 260, 24, hwnd, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kEncrypted)), nullptr, nullptr);
         HWND save = CreateWindowW(L"BUTTON", L"Save", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-                                  160, 172, 120, 32, hwnd, reinterpret_cast<HMENU>(kSave), nullptr, nullptr);
+                                  160, 172, 120, 32, hwnd, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kSave)), nullptr, nullptr);
         HWND benchmark = CreateWindowW(L"BUTTON", L"Benchmark now", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-                                       292, 172, 150, 32, hwnd, reinterpret_cast<HMENU>(kBenchmark), nullptr, nullptr);
+                                       292, 172, 150, 32, hwnd, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kBenchmark)), nullptr, nullptr);
         CreateWindowW(L"STATIC", L"Latest automatic DNS metrics", WS_CHILD | WS_VISIBLE,
                       20, 226, 250, 22, hwnd, nullptr, nullptr, nullptr);
         g_metrics = CreateWindowW(L"EDIT", L"", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_MULTILINE | ES_AUTOVSCROLL |
                                   ES_AUTOHSCROLL | WS_VSCROLL | WS_HSCROLL | ES_READONLY,
-                                  20, 252, 700, 230, hwnd, reinterpret_cast<HMENU>(kMetrics), nullptr, nullptr);
+                                  20, 252, 700, 230, hwnd, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kMetrics)), nullptr, nullptr);
         for (HWND control : {g_mode, g_nameservers, g_doh, g_encrypted, save, benchmark, g_metrics}) SetFont(control);
         LoadSettings();
         return 0;
