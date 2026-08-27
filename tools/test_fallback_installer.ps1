@@ -102,7 +102,11 @@ $launch = Start-Process -FilePath $launcher -ArgumentList @(
     '--remote-debugging-port=0',
     '--no-first-run',
     'about:blank'
-) -Wait -PassThru
+) -PassThru
+if (-not $launch.WaitForExit(60000)) {
+    Stop-Process -Id $launch.Id -Force -ErrorAction SilentlyContinue
+    throw 'NautrixLauncher.exe did not exit after launching the fallback browser.'
+}
 if ($launch.ExitCode -ne 0) { throw "NautrixLauncher.exe failed with exit code $($launch.ExitCode)." }
 
 $newProcesses = @()
