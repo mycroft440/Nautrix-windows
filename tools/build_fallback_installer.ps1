@@ -87,7 +87,7 @@ $chromeDir = $browser.Directory.FullName
 
 $payload = Join-Path $WorkDir 'payload'
 New-Item -ItemType Directory -Path $payload | Out-Null
-Copy-Item -LiteralPath (Join-Path $chromeDir '*') -Destination $payload -Recurse -Force
+Copy-Item -Path (Join-Path $chromeDir '*') -Destination $payload -Recurse -Force
 Copy-Item -LiteralPath (Join-Path $launcherDir 'NautrixLauncher.exe') -Destination $payload -Force
 Copy-Item -LiteralPath (Join-Path $launcherDir 'NautrixNetworkSettings.exe') -Destination $payload -Force
 Copy-Item -LiteralPath (Join-Path $repo 'config') -Destination $payload -Recurse -Force
@@ -125,7 +125,7 @@ if (-not $makensis) {
     $known = @(
         (Join-Path ${env:ProgramFiles(x86)} 'NSIS/makensis.exe'),
         (Join-Path $env:ProgramFiles 'NSIS/makensis.exe')
-    ) | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) | Select-Object -First 1
+    ) | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } | Select-Object -First 1
     if (-not $known) { throw 'makensis.exe was not found. Install NSIS before building the fallback installer.' }
     $makensisPath = $known
 } else {
