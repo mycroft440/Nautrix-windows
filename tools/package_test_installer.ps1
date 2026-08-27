@@ -29,6 +29,8 @@ $required = @(
     (Join-Path $LauncherOutput 'NautrixNetworkSettings.exe'),
     (Join-Path $repo 'config/dns.ini'),
     (Join-Path $repo 'config/latency.ini'),
+    (Join-Path $repo 'extensions/nautrix-blocker/manifest.json'),
+    (Join-Path $repo 'extensions/nautrix-blocker/rules.json'),
     (Join-Path $repo 'tools/install_test_package.ps1'),
     (Join-Path $repo 'tools/install_test_package.cmd'),
     (Join-Path $repo 'tools/start_installed_nautrix.cmd'),
@@ -55,6 +57,7 @@ Copy-Item -LiteralPath (Join-Path $repo 'tools/verify_test_package.ps1') -Destin
 Copy-Item -LiteralPath (Join-Path $repo 'docs/TEST_INSTALL.md') -Destination $OutputDir
 Copy-Item -LiteralPath (Join-Path $repo 'docs/RUNTIME_CHECKLIST.md') -Destination $OutputDir
 Copy-Item -Recurse -LiteralPath (Join-Path $repo 'config') -Destination (Join-Path $OutputDir 'config')
+Copy-Item -Recurse -LiteralPath (Join-Path $repo 'extensions') -Destination (Join-Path $OutputDir 'extensions')
 
 $version = (Get-Content -LiteralPath (Join-Path $repo 'chromium/VERSION') -Raw).Trim()
 $metadata = [ordered]@{
@@ -67,6 +70,8 @@ $metadata = [ordered]@{
     automated_install_test = 'Install-Nautrix-Test.cmd'
     verifier = 'Verify-Nautrix-TestPackage.ps1'
     launcher = 'Start-Nautrix.cmd'
+    resource_policy = 'config/latency.ini'
+    lightweight_blocker = 'extensions/nautrix-blocker/manifest.json'
 }
 $metadata | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $OutputDir 'package.json') -Encoding utf8
 
