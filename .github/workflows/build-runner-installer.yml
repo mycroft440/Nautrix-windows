@@ -1,0 +1,94 @@
+name: Build Nautrix Runner Installer
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "tools/runner_installer/**"
+      - "tools/setup_nautrix_runner.ps1"
+      - ".github/workflows/build-runner-installer.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "tools/runner_installer/**"
+      - "tools/setup_nautrix_runner.ps1"
+      - ".github/workflows/build-runner-installer.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-installer:
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install PyInstaller
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "pyinstaller==6.15.0"
+
+      - name: Validate Python source
+        shell: pwsh
+        run: |
+          python -m py_compile tools/runner_installer/nautrix_runner_installer.py
+          python tools/runner_installer/nautrix_runner_installer.py --self-test
+
+      - name: Validate PowerShell backend
+        shell: pwsh
+        run: |
+          $null = [scriptblock]::Create((Get-Content -Raw -LiteralPath tools/setup_nautrix_runner.ps1))
+          Write-Host "PowerShell setup backend parsed successfully."
+
+      - name: Build graphical installer
+        shell: pwsh
+        run: |
+          pyinstaller `
+            --noconfirm `
+            --clean `
+            --onefile `
+            --windowed `
+            --name NautrixRunnerInstaller `
+            --add-data "tools/setup_nautrix_runner.ps1;tools" `
+            tools/runner_installer/nautrix_runner_installer.py
+
+      - name: Smoke test packaged installer
+        shell: pwsh
+        run: |
+          & .\dist\NautrixRunnerInstaller.exe --self-test
+          if ($LASTEXITCODE -ne 0) {
+            throw "Packaged installer self-test failed with exit code $LASTEXITCODE"
+          }
+          $item = Get-Item .\dist\NautrixRunnerInstaller.exe
+          Write-Host ("Installer size: {0:N0} bytes" -f $item.Length)
+          if ($item.Length -lt 1MB) {
+            throw "Packaged installer is unexpectedly small."
+          }
+
+      - name: Generate SHA-256
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash .\dist\NautrixRunnerInstaller.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  NautrixRunnerInstaller.exe" | Set-Content -Encoding ascii .\dist\NautrixRunnerInstaller.sha256
+          Get-Content .\dist\NautrixRunnerInstaller.sha256
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Nautrix-Runner-Installer-x64
+          path: |
+            dist/NautrixRunnerInstaller.exe
+            dist/NautrixRunnerInstaller.sha256
+          if-no-files-found: error
+          retention-days: 30
