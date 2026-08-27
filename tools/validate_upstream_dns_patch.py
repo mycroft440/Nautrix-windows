@@ -3,11 +3,11 @@
 
 from __future__ import annotations
 
-import base64
 import importlib.util
 import tempfile
-import urllib.request
 from pathlib import Path
+
+from upstream_fetch import fetch_gitiles_text
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -33,14 +33,12 @@ def pinned_revision() -> str:
 
 
 def fetch_source(revision: str, path: str) -> str:
-    url = f"https://chromium.googlesource.com/chromium/src/+/{revision}/{path}?format=TEXT"
-    request = urllib.request.Request(url, headers={"User-Agent": "Nautrix-upstream-patch-validator/2.0"})
-    with urllib.request.urlopen(request, timeout=45) as response:
-        encoded = response.read()
-    try:
-        return base64.b64decode(encoded, validate=True).decode("utf-8")
-    except Exception as exc:
-        raise RuntimeError(f"Invalid Gitiles source response for {path}") from exc
+    return fetch_gitiles_text(
+        revision,
+        path,
+        user_agent="Nautrix-upstream-patch-validator/2.0",
+        timeout=45,
+    )
 
 
 def main() -> int:
