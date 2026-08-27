@@ -25,7 +25,14 @@ foreach ($url in $urls) {
 }
 $rows | Export-Csv -NoTypeInformation -Encoding utf8 (Join-Path $OutputDir 'headless-smoke.csv')
 
-& $Launcher --browser="$Browser" --config-dir="$ConfigDir" --benchmark-only --force-dns-retest
-if ($LASTEXITCODE -ne 0) { throw "DNS benchmark failed with exit code $LASTEXITCODE" }
+$launcherProcess = Start-Process -FilePath $Launcher -ArgumentList @(
+    "--browser=`"$Browser`"",
+    "--config-dir=`"$ConfigDir`"",
+    '--benchmark-only',
+    '--force-dns-retest'
+) -Wait -PassThru
+if ($launcherProcess.ExitCode -ne 0) {
+    throw "DNS benchmark failed with exit code $($launcherProcess.ExitCode)"
+}
 
 Write-Host "[Nautrix] Runtime smoke completed: $OutputDir"
