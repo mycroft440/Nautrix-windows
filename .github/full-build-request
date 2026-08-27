@@ -1,0 +1,3 @@
+variant=baseline
+reason=final Windows installable distribution validation
+requested_after=native installer integration and fallback distribution gate
