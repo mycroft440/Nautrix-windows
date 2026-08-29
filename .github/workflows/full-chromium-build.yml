@@ -105,7 +105,7 @@ jobs:
       BUILD_VARIANT: ${{ github.event_name == 'workflow_dispatch' && inputs.variant || 'baseline' }}
     steps:
       - name: Checkout Nautrix
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           # Chromium's checkout and build outputs are intentionally ignored and
           # reused by this dedicated runner between baseline and PGO runs.
