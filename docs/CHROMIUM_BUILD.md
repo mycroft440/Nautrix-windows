@@ -6,10 +6,13 @@ A full Chromium Windows checkout/build needs a capable x64 Windows machine, Visu
 
 The repository intentionally keeps hosted CI lightweight; full builds are executed on a workstation or self-hosted runner.
 
-The full-build workflow fails early unless an online runner has all four labels:
-`self-hosted`, `Windows`, `X64`, and `nautrix-chromium`. This prevents a build
-request from appearing healthy while it waits indefinitely for unavailable
-capacity.
+The full-build workflow fails early unless the repository variable
+`NAUTRIX_FULL_BUILD_RUNNER_READY` is `true`. `Setup-Nautrix-Runner.cmd` sets the
+gate to false before setup and enables it only after GitHub reports an online
+runner with all four labels: `self-hosted`, `Windows`, `X64`, and
+`nautrix-chromium`. This avoids relying on the workflow `GITHUB_TOKEN`, which
+cannot read repository runners, and prevents an unconfigured build request from
+waiting indefinitely for capacity.
 
 ## Baseline build
 

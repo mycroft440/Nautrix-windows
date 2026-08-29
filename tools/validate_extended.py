@@ -273,12 +273,19 @@ def validate_automation(*, run_package_validation: bool = True) -> None:
     assert "install_test_package.ps1" in full
     assert "UninstallAfterTest" in full
     for token in (
-        "listSelfHostedRunnersForRepo",
         "requiredLabels",
-        "runner.status === 'online'",
-        "No online runner has every required label",
+        "NAUTRIX_FULL_BUILD_RUNNER_READY",
+        "Runner readiness gate is enabled",
     ):
         assert token in full, f"full-build runner preflight missing: {token}"
+
+    runner_setup = read("tools/setup_nautrix_runner.ps1")
+    for token in (
+        "Set-FullBuildRunnerReady",
+        "variable set NAUTRIX_FULL_BUILD_RUNNER_READY",
+        "Wait-RunnerOnline $gh",
+    ):
+        assert token in runner_setup, f"runner readiness setup missing: {token}"
 
     hosted_validation = read(".github/workflows/validate-chromium-layer.yml")
     assert "validate_upstream_product_identity.py" in hosted_validation
