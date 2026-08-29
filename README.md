@@ -28,7 +28,10 @@ The native `NautrixLauncher.exe` implements browser-local DNS selection and late
 - QUIC/HTTP3 remains enabled by default
 - HTTPS/SVCB remains enabled on the pinned Chromium revision
 
-Metrics are written under `%LOCALAPPDATA%\Nautrix`.
+Packaged `config\dns.ini` and `config\latency.ini` files are immutable defaults.
+On first launch they are copied to `%LOCALAPPDATA%\Nautrix\Config`, which is the
+writable per-user configuration used thereafter. Metrics are written separately
+under `%LOCALAPPDATA%\Nautrix`.
 
 ## Trading Mode
 
@@ -57,7 +60,8 @@ tools\set_trading_mode.ps1 -Mode normal
 tools\set_trading_mode.ps1 -Mode aggressive
 ```
 
-The selected mode applies on the next Nautrix launch.
+The selected mode applies on the next Nautrix launch. The settings UI and mode
+switch script update the per-user copy, not files beside the installed browser.
 
 ## Experimental low-latency A/B switches
 
@@ -152,3 +156,9 @@ Normal Google website authentication is a runtime compatibility goal. Official C
 The downstream Chromium integration, browser-local DNS override, DNS/DoH/IPv4/IPv6 route selector, Trading Mode source layer, persistent preconnect/keep-alive, selective Chromium network/Blink priority patches, A/B experimental feature injection, native diagnostics, tail-latency measurement tooling and lightweight exact-pin CI validation are implemented.
 
 `PLAN.md` distinguishes source/CI-validated work from the final gates that still require a complete Chromium binary and an interactive Windows runtime. Source-layer validation does not claim that a full Chromium binary has already been built or that every optimization has already proven a latency win on real hardware.
+
+Security reporting, licensing, third-party distribution obligations, Chromium
+Stable monitoring and the release/signing/update gates are documented in
+`SECURITY.md`, `THIRD_PARTY_NOTICES.md`, and `docs/RELEASE_SECURITY.md`. Signing
+and automatic updates remain release blockers until their infrastructure is
+implemented and tested.

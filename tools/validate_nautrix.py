@@ -80,7 +80,10 @@ def _validate_google_browser_credentials_disabled() -> None:
 def _validate_dns_and_latency_config() -> None:
     dns = (REPO / "config/dns.ini").read_text(encoding="utf-8")
     latency = (REPO / "config/latency.ini").read_text(encoding="utf-8")
-    launcher = (REPO / "launcher/main.cpp").read_text(encoding="utf-8")
+    launcher = (
+        (REPO / "launcher/nautrix_launcher.cpp").read_text(encoding="utf-8")
+        + (REPO / "launcher/nautrix_launcher_impl.inc").read_text(encoding="utf-8")
+    )
 
     for required in (
         "mode=automatic",
@@ -101,13 +104,41 @@ def _validate_dns_and_latency_config() -> None:
         "BenchmarkProvider",
         "ParseDnsAddresses",
         "ConnectTcp443",
-        "MeasurePriorityHostConnect",
+        "settings.priority_hosts",
         "NetworkSignature",
         "NAUTRIX_DNS_MODE",
         "NAUTRIX_DNS_NAMESERVERS",
         "HappyEyeballsV3",
     ):
         assert symbol in launcher, f"Native launcher missing {symbol}"
+
+
+def _validate_canonical_launcher_and_user_config() -> None:
+    obsolete = REPO / "launcher/main.cpp"
+    assert not obsolete.exists(), "Obsolete launcher/main.cpp must not shadow the built launcher"
+
+    cmake = (REPO / "launcher/CMakeLists.txt").read_text(encoding="utf-8")
+    assert "nautrix_launcher.cpp" in cmake
+    assert "main.cpp" not in cmake
+
+    user_config = (REPO / "launcher/user_config.h").read_text(encoding="utf-8")
+    for token in (
+        'LocalStateDirectory() / L"Config"',
+        'L"dns.ini"',
+        'L"latency.ini"',
+        "copy_options::skip_existing",
+    ):
+        assert token in user_config, f"Per-user configuration is missing: {token}"
+
+    launcher = (REPO / "launcher/nautrix_launcher.cpp").read_text(encoding="utf-8")
+    assert "PrepareUserConfigDirectory(packaged_config_dir)" in launcher
+    assert "--nautrix-use-config-dir-directly" in launcher
+    assert 'owned.emplace_back(L"--config-dir=" + effective_config_dir.wstring())' in launcher
+    assert "BuildInjectedArgs(effective_config_dir / L\"latency.ini\")" in launcher
+
+    settings = (REPO / "launcher/network_settings.cpp").read_text(encoding="utf-8")
+    assert "PrepareUserConfigDirectory(result)" in settings
+    assert "nautrix_config::LocalStateDirectory()" in settings
 
 
 def _validate_no_embedded_engine() -> None:
@@ -179,11 +210,41 @@ def _validate_product_and_dns_layer() -> None:
             encoding="utf-8",
         )
         modes.write_text(
+            'inline constexpr char kSafeBrowsingName[] = "chromium";\n'
             'inline constexpr wchar_t kProductPathName[] = L"Chromium";\n'
             '.base_app_name = L"Chromium",\n.base_app_id = L"Chromium",\n'
             '.browser_prog_id_prefix = L"ChromiumHTM",\nL"Chromium HTML Document",\n'
             '.direct_launch_url_scheme = "chromium",\n'
-            '.pdf_prog_id_prefix = L"ChromiumPDF",\nL"Chromium PDF Document",\n',
+            '.pdf_prog_id_prefix = L"ChromiumPDF",\nL"Chromium PDF Document",\n'
+            'L"{7D2B3E1D-D096-4594-9D8F-A6667F12E0AC}",\n'
+            '.toast_activator_clsid = {0x635EFA6F,\n'
+            '                                  0x08D6,\n'
+            '                                  0x4EC9,\n'
+            '                                  {0xBD, 0x14, 0x8A, 0x0F, 0xDE, 0x97, 0x51,\n'
+            '                                   0x59}},\n'
+            '.elevator_clsid = {0xD133B120,\n'
+            '                           0x6DB4,\n'
+            '                           0x4D6B,\n'
+            '                           {0x8B, 0xFE, 0x83, 0xBF, 0x8C, 0xA1, 0xB1,\n'
+            '                            0xB0}},\n'
+            '.elevator_iid = {0xbb19a0e5,\n'
+            '                         0xc6,\n'
+            '                         0x4966,\n'
+            '                         {0x94, 0xb2, 0x5a, 0xfe, 0xc6, 0xfe, 0xd9,\n'
+            '                          0x3a}},\n'
+            '.tracing_service_clsid = {0x83f69367,\n'
+            '                                  0x442d,\n'
+            '                                  0x447f,\n'
+            '                                  {0x8b, 0xcc, 0x0e, 0x3f, 0x97, 0xbe, 0x9c,\n'
+            '                                   0xf2}},\n'
+            '.tracing_service_iid = {0xa3fd580a,\n'
+            '                                0xffd4,\n'
+            '                                0x4075,\n'
+            '                                {0x91, 0x74, 0x75, 0xd0, 0xb1, 0x99, 0xd3,\n'
+            '                                 0xcb}},\n'
+            'L"S-1-15-2-3251537155-1984446955-2931258699-841473695-"\n'
+            '            L"1938553385-"\n'
+            '            L"924012148-",\n',
             encoding="utf-8",
         )
         strings.write_text(
@@ -198,8 +259,29 @@ def _validate_product_and_dns_layer() -> None:
 
         assert "PRODUCT_FULLNAME=Nautrix" in branding.read_text(encoding="utf-8")
         patched_modes = modes.read_text(encoding="utf-8")
+        assert 'kSafeBrowsingName[] = "nautrix"' in patched_modes
         assert 'kProductPathName[] = L"Nautrix"' in patched_modes
         assert '.direct_launch_url_scheme = "nautrix"' in patched_modes
+        for unique_identity in (
+            "A7564E8E-A0AE-4BD2-8312-6E563FCDC031",
+            "0xEF7084E3",
+            "0x9CDC8406",
+            "0xCF9474A8",
+            "0x1009CE63",
+            "0xC84620C3",
+            "S-1-15-2-1678718263-3522501877-2723596049-3126371815-",
+        ):
+            assert unique_identity in patched_modes
+        for chromium_identity in (
+            "7D2B3E1D-D096-4594-9D8F-A6667F12E0AC",
+            "0x635EFA6F",
+            "0xD133B120",
+            "0xbb19a0e5",
+            "0x83f69367",
+            "0xa3fd580a",
+            "S-1-15-2-3251537155-1984446955-2931258699-841473695-",
+        ):
+            assert chromium_identity not in patched_modes
 
         patched_strings = strings.read_text(encoding="utf-8")
         assert "Welcome to Nautrix" in patched_strings
@@ -221,6 +303,7 @@ def main() -> int:
     _validate_gn_args()
     _validate_google_browser_credentials_disabled()
     _validate_dns_and_latency_config()
+    _validate_canonical_launcher_and_user_config()
     _validate_no_embedded_engine()
     _validate_product_and_dns_layer()
     print(

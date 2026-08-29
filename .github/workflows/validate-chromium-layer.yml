@@ -36,6 +36,10 @@ jobs:
         shell: pwsh
         run: python tools/validate_extended.py
 
+      - name: Validate product branding and unique Windows identity against pinned Chromium
+        shell: pwsh
+        run: python tools/validate_upstream_product_identity.py
+
       - name: Validate DNS and preconnect patches against pinned Chromium
         shell: pwsh
         run: python tools/validate_upstream_dns_patch.py

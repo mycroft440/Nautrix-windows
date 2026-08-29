@@ -149,7 +149,14 @@ def validate_trading_latency_tools() -> None:
         assert token in preconnect, f"missing keepalive token: {token}"
 
     mode_switch = read("tools/set_trading_mode.ps1")
-    for token in ("automatic", "normal", "aggressive", "trading_mode=$Mode"):
+    for token in (
+        "automatic",
+        "normal",
+        "aggressive",
+        "trading_mode=$Mode",
+        "Nautrix\\Config",
+        "Copy-Item -LiteralPath $packagedConfig",
+    ):
         assert token in mode_switch, f"missing trading-mode switch token: {token}"
 
     nic = read("tools/windows_nic_diagnostics.ps1")
@@ -203,7 +210,61 @@ def validate_pgo() -> None:
         assert gclient.read_text(encoding="utf-8") == text
 
 
-def validate_automation() -> None:
+def validate_security_and_distribution_policy() -> None:
+    license_text = read("LICENSE")
+    assert "BSD 3-Clause License" in license_text
+    assert "Nautrix contributors" in license_text
+
+    security = read("SECURITY.md")
+    for token in (
+        "pre-release software",
+        "private",
+        "vulnerability-reporting",
+        "Authenticode",
+        "tested update and rollback path",
+    ):
+        assert token in security, f"security policy missing: {token}"
+
+    notices = read("THIRD_PARTY_NOTICES.md")
+    for token in ("Chromium", "chrome://credits", "FFmpeg", "Widevine"):
+        assert token in notices, f"third-party notices missing: {token}"
+
+    release = read("docs/RELEASE_SECURITY.md")
+    for token in (
+        "signed update manifest",
+        "cryptographic verification",
+        "rollback",
+        "staged rollout",
+        "third-party notices",
+    ):
+        assert token in release, f"release security gate missing: {token}"
+
+    watcher = read(".github/workflows/chromium-stable-watch.yml")
+    for token in (
+        "schedule:",
+        "issues: write",
+        "versionhistory.googleapis.com",
+        "versions[0].version",
+        "sort --version-sort",
+        "nautrix-chromium-stable-watch",
+        "OUTDATED",
+        "state_reason: 'completed'",
+        "issues.create",
+        "issues.update",
+    ):
+        assert token in watcher, f"Chromium Stable watcher missing: {token}"
+
+    dependabot = read(".github/dependabot.yml")
+    assert "package-ecosystem: github-actions" in dependabot
+    assert "interval: weekly" in dependabot
+
+    for relative in ("chromium/args/Release.gn", "chromium/args/ReleasePGO.gn"):
+        args = read(relative)
+        assert "proprietary_codecs = true" not in args
+        assert 'ffmpeg_branding = "Chrome"' not in args
+
+
+def validate_automation(*, run_package_validation: bool = True) -> None:
     full = read(".github/workflows/full-chromium-build.yml")
     assert "nautrix-chromium" in full
     assert "runtime_smoke.ps1" in full
@@ -211,6 +272,16 @@ def validate_automation() -> None:
     assert "verify_test_package.ps1" in full
     assert "install_test_package.ps1" in full
     assert "UninstallAfterTest" in full
+    for token in (
+        "listSelfHostedRunnersForRepo",
+        "requiredLabels",
+        "runner.status === 'online'",
+        "No online runner has every required label",
+    ):
+        assert token in full, f"full-build runner preflight missing: {token}"
+
+    hosted_validation = read(".github/workflows/validate-chromium-layer.yml")
+    assert "validate_upstream_product_identity.py" in hosted_validation
 
     package = read("tools/package_test_installer.ps1")
     for token in (
@@ -270,6 +341,11 @@ def validate_automation() -> None:
         "Stop-NautrixProcesses",
         "Test-package verification failed before installation",
         "Native installer did not deploy required Nautrix payload",
+        "Get-FreeTcpPort",
+        "/json/version",
+        "https://example.com",
+        "Nautrix/Config",
+        "per-user configuration",
     ):
         assert token in install, f"native installer test missing: {token}"
     assert "--installerdata=" not in install, (
@@ -289,10 +365,11 @@ def validate_automation() -> None:
     footprint = read("tools/measure_launcher_footprint.ps1")
     assert "Total native-helper size" in footprint
 
-    subprocess.run(
-        [sys.executable, str(REPO / "tools/validate_test_package.py")],
-        check=True,
-    )
+    if run_package_validation:
+        subprocess.run(
+            [sys.executable, str(REPO / "tools/validate_test_package.py")],
+            check=True,
+        )
 
     regression = read(".github/workflows/runtime-regression.yml")
     for token in (
@@ -302,6 +379,28 @@ def validate_automation() -> None:
         "profile_browser.ps1",
     ):
         assert token in regression, f"runtime regression missing: {token}"
+
+    runtime_smoke = read("tools/runtime_smoke.ps1")
+    for token in (
+        "Browser --version failed",
+        "Headless navigation failed",
+        "did not contain expected output",
+        "DNS benchmark returned success without producing metrics",
+        "selected=(?!system",
+    ):
+        assert token in runtime_smoke, f"runtime smoke is not fail-closed: {token}"
+
+    network_probe = read("tools/chromium_network_probe.ps1")
+    for token in (
+        "network probe failed",
+        "did not produce a NetLog",
+        "did not produce a summary",
+    ):
+        assert token in network_probe, f"network probe is not fail-closed: {token}"
+
+    benchmark = read("tools/benchmark_navigation.ps1")
+    assert "failed sample(s)" in benchmark
+    assert "incomplete successful samples" in benchmark
 
     bootstrap = read("tools/bootstrap_chromium.cmd")
     for token in (
@@ -319,6 +418,7 @@ def main() -> int:
     validate_native_tools()
     validate_trading_latency_tools()
     validate_pgo()
+    validate_security_and_distribution_policy()
     validate_automation()
     print("Nautrix extended DNS/trading-latency/PGO/installer automation checks passed.")
     return 0
