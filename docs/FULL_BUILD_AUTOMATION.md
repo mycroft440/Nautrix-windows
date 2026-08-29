@@ -15,6 +15,13 @@ nautrix-chromium
 
 Then run the `Full Chromium Build` workflow and select `baseline` or `pgo`.
 
+Use `Setup-Nautrix-Runner.cmd` for registration. It verifies the runner through
+the GitHub API and then sets the repository variable
+`NAUTRIX_FULL_BUILD_RUNNER_READY=true`. The hosted preflight requires that gate
+because the standard workflow token does not have permission to list repository
+runners. The setup script temporarily sets the gate to false while it checks or
+repairs the runner.
+
 The workflow builds Chromium, builds the native Nautrix launcher/settings tools, executes the non-interactive runtime smoke checks, packages the browser, and uploads the resulting artifact.
 
 ## Runtime regression

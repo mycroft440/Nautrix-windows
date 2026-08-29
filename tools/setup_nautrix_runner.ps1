@@ -210,6 +210,17 @@ function Wait-RunnerOnline([string]$Gh) {
     throw "The runner service was started, but GitHub did not report '$RunnerName' online with label '$RunnerLabel' within 60 seconds."
 }
 
+function Set-FullBuildRunnerReady([string]$Gh, [bool]$Ready) {
+    $value = $Ready.ToString().ToLowerInvariant()
+    Write-Step "Setting the full-build runner readiness gate to '$value'..."
+    & $Gh variable set NAUTRIX_FULL_BUILD_RUNNER_READY `
+        --body $value `
+        --repo $Repository
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Could not update the NAUTRIX_FULL_BUILD_RUNNER_READY repository variable. The authenticated GitHub account must have repository administration access.'
+    }
+}
+
 function Get-RunnerServiceName([string]$Root) {
     $serviceConfig = Join-Path $Root '.service'
     if (-not (Test-Path -LiteralPath $serviceConfig)) {
@@ -309,6 +320,7 @@ Enable-LongPathSupport
 $gh = Ensure-GitHubCli
 Ensure-CppBuildTools
 Ensure-GitHubAuthentication $gh
+Set-FullBuildRunnerReady $gh $false
 
 if (Test-Path -LiteralPath (Join-Path $runnerRoot '.runner')) {
     Write-Step "An existing runner configuration was found at $runnerRoot. Checking its Windows service..."
@@ -324,6 +336,7 @@ if (Test-Path -LiteralPath (Join-Path $runnerRoot '.runner')) {
     }
 
     if ($existingReady) {
+        Set-FullBuildRunnerReady $gh $true
         Write-Host "`n[Nautrix] Runner is installed and running as a Windows service." -ForegroundColor Green
         Write-Host '[Nautrix] The latest queued Full Chromium Build can now start automatically.' -ForegroundColor Green
         exit 0
@@ -377,6 +390,7 @@ try {
     }
 
     Wait-RunnerOnline $gh
+    Set-FullBuildRunnerReady $gh $true
 } finally {
     if (Test-Path -LiteralPath $tempRoot) {
         Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue

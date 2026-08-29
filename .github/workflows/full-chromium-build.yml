@@ -35,8 +35,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Cancel stale Full Chromium Build runs
+      - name: Cancel stale runs and verify the runner readiness gate
         uses: actions/github-script@v8
+        env:
+          NAUTRIX_FULL_BUILD_RUNNER_READY: ${{ vars.NAUTRIX_FULL_BUILD_RUNNER_READY }}
         with:
           script: |
             const { owner, repo } = context.repo;
@@ -73,28 +75,19 @@ jobs:
               }
             }
 
-            const runners = await github.paginate(
-              github.rest.actions.listSelfHostedRunnersForRepo,
-              { owner, repo, per_page: 100 }
-            );
             const requiredLabels = ['self-hosted', 'windows', 'x64', 'nautrix-chromium'];
-            const eligible = runners.filter((runner) => {
-              const labels = new Set(runner.labels.map((label) => label.name.toLowerCase()));
-              return runner.status === 'online' && requiredLabels.every((label) => labels.has(label));
-            });
-            if (eligible.length === 0) {
-              const observed = runners.length === 0
-                ? 'no repository self-hosted runners are registered'
-                : runners.map((runner) => {
-                    const labels = runner.labels.map((label) => label.name).join(',');
-                    return `${runner.name}:${runner.status}[${labels}]`;
-                  }).join('; ');
+            const runnerReady =
+              (process.env.NAUTRIX_FULL_BUILD_RUNNER_READY || '').toLowerCase() === 'true';
+            if (!runnerReady) {
               core.setFailed(
-                `No online runner has every required label (${requiredLabels.join(', ')}); ${observed}. ` +
-                'Run Setup-Nautrix-Runner.cmd on the Windows build machine and confirm the runner service is online.'
+                `The NAUTRIX_FULL_BUILD_RUNNER_READY repository variable is not true. ` +
+                `Run Setup-Nautrix-Runner.cmd on the Windows build machine; it verifies the online runner ` +
+                `with labels (${requiredLabels.join(', ')}) before enabling this gate.`
               );
             } else {
-              core.info(`Eligible Nautrix full-build runner(s): ${eligible.map((runner) => runner.name).join(', ')}`);
+              core.info(
+                `Runner readiness gate is enabled for labels: ${requiredLabels.join(', ')}.`
+              );
             }
 
   build:
