@@ -52,6 +52,8 @@ def _patch_windows_install_identity(source_root: Path) -> None:
     text = path.read_text(encoding="utf-8")
 
     replacements = [
+        ('inline constexpr char kSafeBrowsingName[] = "chromium";',
+         'inline constexpr char kSafeBrowsingName[] = "nautrix";'),
         ('inline constexpr wchar_t kProductPathName[] = L"Chromium";',
          'inline constexpr wchar_t kProductPathName[] = L"Nautrix";'),
         ('.base_app_name = L"Chromium",', '.base_app_name = L"Nautrix",'),
@@ -64,11 +66,87 @@ def _patch_windows_install_identity(source_root: Path) -> None:
         ('.pdf_prog_id_prefix = L"ChromiumPDF",',
          '.pdf_prog_id_prefix = L"NautrixPDF",'),
         ('L"Chromium PDF Document",', 'L"Nautrix PDF Document",'),
+        ('L"{7D2B3E1D-D096-4594-9D8F-A6667F12E0AC}",',
+         'L"{A7564E8E-A0AE-4BD2-8312-6E563FCDC031}",'),
     ]
 
     for old, new in replacements:
         if old.startswith(".direct_launch_url_scheme") and old not in text and new not in text:
             continue
+        text = _replace_required(text, old, new, str(path))
+
+    identity_replacements = [
+        (
+            """.toast_activator_clsid = {0x635EFA6F,
+                                  0x08D6,
+                                  0x4EC9,
+                                  {0xBD, 0x14, 0x8A, 0x0F, 0xDE, 0x97, 0x51,
+                                   0x59}},""",
+            """.toast_activator_clsid = {0xEF7084E3,
+                                  0x562E,
+                                  0x484B,
+                                  {0x9C, 0x01, 0x90, 0x0B, 0x7B, 0xA8, 0x2E,
+                                   0x6E}},""",
+        ),
+        (
+            """.elevator_clsid = {0xD133B120,
+                           0x6DB4,
+                           0x4D6B,
+                           {0x8B, 0xFE, 0x83, 0xBF, 0x8C, 0xA1, 0xB1,
+                            0xB0}},""",
+            """.elevator_clsid = {0x9CDC8406,
+                           0x56F7,
+                           0x497D,
+                           {0xAF, 0x00, 0x7B, 0xCC, 0x23, 0x25, 0x75,
+                            0x08}},""",
+        ),
+        (
+            """.elevator_iid = {0xbb19a0e5,
+                         0xc6,
+                         0x4966,
+                         {0x94, 0xb2, 0x5a, 0xfe, 0xc6, 0xfe, 0xd9,
+                          0x3a}},""",
+            """.elevator_iid = {0xCF9474A8,
+                         0xFB77,
+                         0x4679,
+                         {0xB3, 0x9F, 0x51, 0x22, 0x21, 0x7E, 0xB4,
+                          0xB5}},""",
+        ),
+        (
+            """.tracing_service_clsid = {0x83f69367,
+                                  0x442d,
+                                  0x447f,
+                                  {0x8b, 0xcc, 0x0e, 0x3f, 0x97, 0xbe, 0x9c,
+                                   0xf2}},""",
+            """.tracing_service_clsid = {0x1009CE63,
+                                  0x7DB2,
+                                  0x44F0,
+                                  {0x8E, 0x7D, 0x64, 0x98, 0x2A, 0xD3, 0xD4,
+                                   0x14}},""",
+        ),
+        (
+            """.tracing_service_iid = {0xa3fd580a,
+                                0xffd4,
+                                0x4075,
+                                {0x91, 0x74, 0x75, 0xd0, 0xb1, 0x99, 0xd3,
+                                 0xcb}},""",
+            """.tracing_service_iid = {0xC84620C3,
+                                0x4A0A,
+                                0x4779,
+                                {0xB6, 0x02, 0x53, 0xD2, 0xFA, 0x0E, 0xC3,
+                                 0x52}},""",
+        ),
+        (
+            """L"S-1-15-2-3251537155-1984446955-2931258699-841473695-"
+            L"1938553385-"
+            L"924012148-",""",
+            """L"S-1-15-2-1678718263-3522501877-2723596049-3126371815-"
+            L"1400289899-"
+            L"912135048-",""",
+        ),
+    ]
+
+    for old, new in identity_replacements:
         text = _replace_required(text, old, new, str(path))
 
     path.write_text(text, encoding="utf-8", newline="\n")

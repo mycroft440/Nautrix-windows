@@ -1,5 +1,45 @@
 # Nautrix Windows — Development Plan
 
+## Browser-readiness remediation — 2026-08-29
+
+This checklist is the source of truth for the current hardening pass. An item is
+checked only after its implementation and the corresponding automated validation
+exist. Gates that require a complete Windows Chromium binary remain unchecked.
+
+### Verified starting point
+
+- [x] Repository and latest `main` workflow state audited.
+- [x] Pinned Chromium version/revision and upstream patch anchors validated.
+- [x] Native launcher and network-settings tools compile in hosted Windows CI.
+- [x] Confirmed that no complete Nautrix Chromium build or browser Release exists yet.
+- [x] Confirmed that the latest full-build job never acquired the required self-hosted runner.
+
+### Source and CI correctness
+
+- [x] Use one canonical launcher implementation in builds and validators.
+- [x] Store mutable DNS/latency preferences in the user's local profile and seed them from packaged defaults.
+- [x] Make the Trading Mode switch update the same per-user configuration used by the launcher.
+- [x] Give Nautrix unique Windows registration, COM, tracing and sandbox identifiers.
+- [x] Make runtime smoke tests fail on browser launch, navigation, DNS or expected-output failures.
+- [x] Make network probes and navigation benchmarks fail when samples fail or required NetLogs are absent.
+- [x] Add deterministic validation for launcher source selection, per-user configuration and Windows identity.
+
+### Security and distribution baseline
+
+- [x] Add project license, security policy and third-party distribution obligations.
+- [x] Add an automated check that reports when the pinned Chromium Stable version is outdated.
+- [x] Document signing, update, rollback and release gates without claiming they are already operational.
+
+### Binary and interactive hard gates
+
+- [ ] Bring a labeled `self-hosted, Windows, X64, nautrix-chromium` runner online.
+- [ ] Complete the baseline Chromium build and compile every patched translation unit.
+- [ ] Pass install, browser launch, HTTP/HTTPS routing and uninstall tests on clean Windows 10 and 11 users.
+- [ ] Pass core browser, extensions, PWA, Google authentication, WebAuthn and media compatibility tests.
+- [ ] Validate proprietary-codec/Widevine requirements and distribution rights before enabling them.
+- [ ] Configure production signing and a tested automatic-update/rollback channel.
+- [ ] Publish a signed Release only after every required hard gate passes.
+
 ## Execution order
 
 1. [x] Stabilize/pin Chromium and lightweight CI.

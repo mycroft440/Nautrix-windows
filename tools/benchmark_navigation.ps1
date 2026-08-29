@@ -76,5 +76,14 @@ $summary = foreach ($group in ($records | Group-Object url)) {
 }
 $summary | Export-Csv -LiteralPath $summaryPath -NoTypeInformation -Encoding utf8
 
+$failedRecords = @($records | Where-Object exit_code -ne 0)
+if ($failedRecords.Count -ne 0) {
+    $first = $failedRecords[0]
+    throw "Navigation benchmark recorded $($failedRecords.Count) failed sample(s); first failure: $($first.url), exit code $($first.exit_code)."
+}
+if (@($summary | Where-Object { $_.success_samples -ne $_.samples }).Count -ne 0) {
+    throw 'Navigation benchmark summary contains incomplete successful samples.'
+}
+
 Write-Host "[Nautrix] Navigation samples: $Output"
 Write-Host "[Nautrix] Navigation p50/p95/p99 summary: $summaryPath"

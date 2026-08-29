@@ -73,6 +73,30 @@ jobs:
               }
             }
 
+            const runners = await github.paginate(
+              github.rest.actions.listSelfHostedRunnersForRepo,
+              { owner, repo, per_page: 100 }
+            );
+            const requiredLabels = ['self-hosted', 'windows', 'x64', 'nautrix-chromium'];
+            const eligible = runners.filter((runner) => {
+              const labels = new Set(runner.labels.map((label) => label.name.toLowerCase()));
+              return runner.status === 'online' && requiredLabels.every((label) => labels.has(label));
+            });
+            if (eligible.length === 0) {
+              const observed = runners.length === 0
+                ? 'no repository self-hosted runners are registered'
+                : runners.map((runner) => {
+                    const labels = runner.labels.map((label) => label.name).join(',');
+                    return `${runner.name}:${runner.status}[${labels}]`;
+                  }).join('; ');
+              core.setFailed(
+                `No online runner has every required label (${requiredLabels.join(', ')}); ${observed}. ` +
+                'Run Setup-Nautrix-Runner.cmd on the Windows build machine and confirm the runner service is online.'
+              );
+            } else {
+              core.info(`Eligible Nautrix full-build runner(s): ${eligible.map((runner) => runner.name).join(', ')}`);
+            }
+
   build:
     needs: supersede-stale
     runs-on: [self-hosted, Windows, X64, nautrix-chromium]

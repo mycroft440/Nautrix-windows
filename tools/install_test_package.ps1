@@ -49,6 +49,16 @@ function Get-NautrixProcessIds {
         Select-Object -ExpandProperty Id)
 }
 
+function Get-FreeTcpPort {
+    $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
+    try {
+        $listener.Start()
+        return ([Net.IPEndPoint]$listener.LocalEndpoint).Port
+    } finally {
+        $listener.Stop()
+    }
+}
+
 function Stop-NautrixProcesses {
     param([Parameter(Mandatory = $true)][string]$BrowserPath)
 
@@ -244,6 +254,7 @@ $browser = $null
 $launcher = $null
 $settings = $null
 $config = $null
+$runtimeProfile = $null
 try {
     if ((Get-NautrixBrowserPath) -or (Get-NautrixUninstallEntry)) {
         throw 'A Nautrix installation already exists. Use a clean Windows test user before running this installation test.'
@@ -271,11 +282,15 @@ try {
     Assert-ProgIdRouting -Launcher $launcher
 
     $existingProcessIds = Get-NautrixProcessIds -BrowserPath $browser
+    $debugPort = Get-FreeTcpPort
+    $runtimeProfile = Join-Path $env:TEMP "nautrix-installed-runtime-$PID-$([guid]::NewGuid().ToString('N'))"
     $launch = Start-Process -FilePath $launcher -ArgumentList @(
         "--browser=`"$browser`"",
         "--config-dir=`"$config`"",
         '--headless=new',
-        '--remote-debugging-port=0',
+        "--user-data-dir=`"$runtimeProfile`"",
+        '--remote-debugging-address=127.0.0.1',
+        "--remote-debugging-port=$debugPort",
         '--no-first-run',
         'about:blank'
     ) -Wait -PassThru
@@ -292,9 +307,38 @@ try {
         throw 'The installed Nautrix launcher returned success but no installed browser process was observed.'
     }
 
+    $debugVersion = $null
+    for ($attempt = 0; $attempt -lt 20 -and -not $debugVersion; ++$attempt) {
+        try {
+            $debugVersion = Invoke-RestMethod -Uri "http://127.0.0.1:$debugPort/json/version" -TimeoutSec 2
+        } catch {
+            Start-Sleep -Milliseconds 500
+        }
+    }
+    if (-not $debugVersion -or -not $debugVersion.webSocketDebuggerUrl) {
+        throw 'The installed Nautrix browser process started but its runtime debugging endpoint never became ready.'
+    }
+
+    $targetUrl = [Uri]::EscapeDataString('https://example.com')
+    $target = Invoke-RestMethod -Method Put -Uri "http://127.0.0.1:$debugPort/json/new?$targetUrl" -TimeoutSec 10
+    if (-not $target.id -or $target.url -notmatch '^https://example\.com/?$') {
+        throw "The installed Nautrix browser did not accept a real HTTPS navigation target."
+    }
+
+    $userConfig = Join-Path $env:LOCALAPPDATA 'Nautrix/Config'
+    foreach ($filename in 'dns.ini','latency.ini') {
+        $userFile = Join-Path $userConfig $filename
+        if (-not (Test-Path -LiteralPath $userFile -PathType Leaf)) {
+            throw "The launcher did not seed the per-user configuration file: $userFile"
+        }
+        $stream = [IO.File]::Open($userFile, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::Read)
+        $stream.Dispose()
+    }
+
     Write-Host "[Nautrix] Standalone native installer validated at: $installDir"
     Write-Host "[Nautrix] Native shortcuts validated: $($nativeShortcuts.Count)"
     Write-Host "[Nautrix] Launcher-routed ProgID registration validated."
+    Write-Host "[Nautrix] Launcher HTTPS target and per-user configuration validated."
 } catch {
     $failure = $_
 } finally {
@@ -302,6 +346,9 @@ try {
     try {
         $cleanupBrowser = if ($browser) { $browser } else { Get-NautrixBrowserPath }
         if ($cleanupBrowser) { Stop-NautrixProcesses -BrowserPath $cleanupBrowser }
+        if ($runtimeProfile) {
+            Remove-Item -LiteralPath $runtimeProfile -Recurse -Force -ErrorAction SilentlyContinue
+        }
 
         if ($UninstallAfterTest -and ((Get-NautrixBrowserPath) -or (Get-NautrixUninstallEntry))) {
             Invoke-NautrixUninstall

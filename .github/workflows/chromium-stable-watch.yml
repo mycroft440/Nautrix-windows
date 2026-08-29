@@ -1,0 +1,108 @@
+name: Chromium Stable Watch
+
+on:
+  schedule:
+    - cron: '17 9 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: chromium-stable-watch
+  cancel-in-progress: true
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Compare pinned and official Stable versions
+        id: versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          pinned="$(awk -F= '$1 == "VERSION" { print $2 }' chromium/VERSION)"
+          stable="$(curl --fail --silent --show-error --location --retry 3 \
+            'https://versionhistory.googleapis.com/v1/chrome/platforms/win/channels/stable/versions?page_size=1' \
+            | jq --raw-output '.versions[0].version')"
+          if [[ ! "$pinned" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid pinned version: $pinned" >&2
+            exit 1
+          fi
+          if [[ ! "$stable" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid Stable version response: $stable" >&2
+            exit 1
+          fi
+          echo "pinned=$pinned" >> "$GITHUB_OUTPUT"
+          echo "stable=$stable" >> "$GITHUB_OUTPUT"
+          oldest="$(printf '%s\n%s\n' "$pinned" "$stable" | sort --version-sort | head -n 1)"
+          if [[ "$pinned" == "$stable" || "$oldest" == "$stable" ]]; then
+            echo "outdated=false" >> "$GITHUB_OUTPUT"
+            echo "Nautrix pin $pinned is current with or newer than reported Windows Stable $stable." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "outdated=true" >> "$GITHUB_OUTPUT"
+            echo "Nautrix pin $pinned differs from official Stable $stable." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Maintain the Stable update issue
+        uses: actions/github-script@v8
+        env:
+          PINNED_VERSION: ${{ steps.versions.outputs.pinned }}
+          STABLE_VERSION: ${{ steps.versions.outputs.stable }}
+          OUTDATED: ${{ steps.versions.outputs.outdated }}
+        with:
+          script: |
+            const marker = '<!-- nautrix-chromium-stable-watch -->';
+            const outdated = process.env.OUTDATED === 'true';
+            const title = `security: update Chromium Stable to ${process.env.STABLE_VERSION}`;
+            const body = `${marker}
+            Nautrix currently pins Chromium ${process.env.PINNED_VERSION}, while the official Stable channel reports ${process.env.STABLE_VERSION}.
+
+            Required work:
+            - resolve the exact Stable Chromium revision and branch position;
+            - update chromium/VERSION;
+            - run every exact-upstream patch validator;
+            - complete the full Windows baseline build and runtime gates;
+            - publish only through the signed update/release process.
+
+            This issue is maintained automatically by Chromium Stable Watch.`;
+            const { owner, repo } = context.repo;
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner,
+              repo,
+              state: 'all',
+              per_page: 100,
+            });
+            const existing = issues.find(issue => !issue.pull_request && issue.body?.includes(marker));
+            if (!outdated) {
+              if (existing?.state === 'open') {
+                await github.rest.issues.update({
+                  owner,
+                  repo,
+                  issue_number: existing.number,
+                  state: 'closed',
+                  state_reason: 'completed',
+                });
+                core.info(`Closed resolved Chromium Stable issue #${existing.number}.`);
+              } else {
+                core.info('Chromium Stable pin is current; no update issue is open.');
+              }
+              return;
+            }
+            if (existing) {
+              await github.rest.issues.update({
+                owner,
+                repo,
+                issue_number: existing.number,
+                title,
+                body,
+                state: 'open',
+              });
+            } else {
+              await github.rest.issues.create({ owner, repo, title, body });
+            }

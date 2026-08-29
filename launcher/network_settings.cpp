@@ -9,6 +9,8 @@
 #include <string>
 #include <vector>
 
+#include "user_config.h"
+
 #pragma comment(lib, "shell32.lib")
 
 namespace {
@@ -34,14 +36,6 @@ std::filesystem::path ExecutableDirectory() {
     if (!size || size >= buffer.size()) return std::filesystem::current_path();
     buffer.resize(size);
     return std::filesystem::path(buffer).parent_path();
-}
-
-std::filesystem::path LocalStateDirectory() {
-    wchar_t buffer[32768]{};
-    const DWORD size = GetEnvironmentVariableW(L"LOCALAPPDATA", buffer, static_cast<DWORD>(std::size(buffer)));
-    std::filesystem::path base = (size > 0 && size < std::size(buffer)) ? std::filesystem::path(buffer)
-                                                                       : std::filesystem::temp_directory_path();
-    return base / L"Nautrix";
 }
 
 std::string Trim(std::string value) {
@@ -114,7 +108,7 @@ void SetFont(HWND control) {
 }
 
 void RefreshMetrics() {
-    const auto path = LocalStateDirectory() / L"dns-metrics.csv";
+    const auto path = nautrix_config::LocalStateDirectory() / L"dns-metrics.csv";
     std::ifstream input(path);
     if (!input) {
         SetWindowTextW(g_metrics, L"No DNS benchmark has been run yet.");
@@ -238,7 +232,7 @@ std::filesystem::path ParseConfigDirectory() {
         }
         LocalFree(argv);
     }
-    return result;
+    return nautrix_config::PrepareUserConfigDirectory(result);
 }
 
 }  // namespace

@@ -12,6 +12,8 @@
 #include <string_view>
 #include <vector>
 
+#include "user_config.h"
+
 namespace nautrix_bootstrap {
 
 std::filesystem::path ExecutableDirectory() {
@@ -181,7 +183,9 @@ BOOL WINAPI NautrixCreateProcessW(LPCWSTR application_name,
 #undef CreateProcessW
 
 int NautrixLauncherMain(int argc, wchar_t** argv) {
-    std::filesystem::path config_dir = nautrix_bootstrap::ExecutableDirectory() / L"config";
+    std::filesystem::path packaged_config_dir =
+        nautrix_bootstrap::ExecutableDirectory() / L"config";
+    bool use_config_dir_directly = false;
     size_t single_argument_index = static_cast<size_t>(argc);
     for (int i = 1; i < argc; ++i) {
         constexpr std::wstring_view prefix = L"--config-dir=";
@@ -190,8 +194,18 @@ int NautrixLauncherMain(int argc, wchar_t** argv) {
             single_argument_index = static_cast<size_t>(i);
             break;
         }
-        if (arg.rfind(prefix, 0) == 0) config_dir = std::wstring(arg.substr(prefix.size()));
+        if (arg == L"--nautrix-use-config-dir-directly") {
+            use_config_dir_directly = true;
+            continue;
+        }
+        if (arg.rfind(prefix, 0) == 0) {
+            packaged_config_dir = std::wstring(arg.substr(prefix.size()));
+        }
     }
+
+    const std::filesystem::path effective_config_dir = use_config_dir_directly
+        ? packaged_config_dir
+        : nautrix_config::PrepareUserConfigDirectory(packaged_config_dir);
 
     nautrix_bootstrap::g_shell_single_argument = nautrix_bootstrap::ExtractShellSingleArgument();
     if (single_argument_index < static_cast<size_t>(argc) &&
@@ -204,9 +218,21 @@ int NautrixLauncherMain(int argc, wchar_t** argv) {
     std::vector<std::wstring> owned;
     owned.reserve(static_cast<size_t>(argc) + 4);
     const size_t copy_count = std::min(single_argument_index, static_cast<size_t>(argc));
-    for (size_t i = 0; i < copy_count; ++i) owned.emplace_back(argv[i]);
+    constexpr std::wstring_view config_prefix = L"--config-dir=";
+    for (size_t i = 0; i < copy_count; ++i) {
+        const std::wstring_view arg(argv[i]);
+        if (i > 0 && arg.rfind(config_prefix, 0) == 0) {
+            continue;
+        }
+        if (i > 0 && arg == L"--nautrix-use-config-dir-directly") {
+            continue;
+        }
+        owned.emplace_back(argv[i]);
+    }
+    owned.emplace_back(L"--config-dir=" + effective_config_dir.wstring());
 
-    for (auto& injected : nautrix_bootstrap::BuildInjectedArgs(config_dir / L"latency.ini")) {
+    for (auto& injected :
+         nautrix_bootstrap::BuildInjectedArgs(effective_config_dir / L"latency.ini")) {
         bool merged_feature_switch = false;
         if (injected.rfind(L"--enable-features=", 0) == 0) {
             for (size_t i = 1; i < owned.size(); ++i) {

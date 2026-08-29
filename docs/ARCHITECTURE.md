@@ -10,6 +10,12 @@ Chromium's browser, Network Service, GPU, renderer and utility process separatio
 
 The native launcher performs resolver/path selection before Chromium starts, then passes browser-local network policy through environment values consumed by the patched Network Service. Windows DNS is left untouched unless the user explicitly changes it outside Nautrix.
 
+Files shipped under `config` are read-only defaults. The launcher seeds
+`%LOCALAPPDATA%\Nautrix\Config` once and both the launcher and settings UI use
+that per-user location for mutable DNS and latency preferences. This keeps
+installed program files immutable and prevents one user from changing another
+user's browser policy.
+
 ## DNS/network path
 
 Automatic selection measures plain DNS A/AAAA response time, p95, jitter/failures, the provider's DoH HTTPS path, and TCP/443 routes for configured priority hosts. A network signature and hysteresis avoid unnecessary switching. Chromium remains responsible for its own secure resolver, connection pools, QUIC/HTTP3, TLS, cache and isolation.

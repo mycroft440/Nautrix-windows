@@ -6,6 +6,11 @@ A full Chromium Windows checkout/build needs a capable x64 Windows machine, Visu
 
 The repository intentionally keeps hosted CI lightweight; full builds are executed on a workstation or self-hosted runner.
 
+The full-build workflow fails early unless an online runner has all four labels:
+`self-hosted`, `Windows`, `X64`, and `nautrix-chromium`. This prevents a build
+request from appearing healthy while it waits indefinitely for unavailable
+capacity.
+
 ## Baseline build
 
 ```bat
