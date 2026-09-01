@@ -101,6 +101,62 @@ def validate_native_tools() -> None:
     assert "SpareRendererForSitePerProcess" not in launcher
 
 
+def validate_new_tab_page_layer() -> None:
+    patch = read("tools/apply_new_tab_page.py")
+    html = read(
+        "chromium/overrides/new_tab_page_third_party/"
+        "new_tab_page_third_party.html"
+    )
+    script = read(
+        "chromium/overrides/new_tab_page_third_party/"
+        "new_tab_page_third_party.ts"
+    )
+    for token in (
+        "new_tab_page_third_party.html",
+        "new_tab_page_third_party.ts",
+        "chrome/browser/search/search.cc",
+        "NAUTRIX_NEW_TAB_ROUTING_BEGIN",
+    ):
+        assert token in patch, f"offline new-tab patch missing: {token}"
+
+    for token in (
+        "NAUTRIX_NEW_TAB_PAGE_BEGIN",
+        'id="search-engine"',
+        '<option value="google">Google</option>',
+        "Página inicial armazenada no Nautrix",
+        "<cr-most-visited>",
+    ):
+        assert token in html, f"offline new-tab HTML missing: {token}"
+    assert "http://" not in html
+    assert "https://" not in html
+
+    for token in (
+        "nautrix.searchEngine",
+        "return 'google';",
+        "window.localStorage.getItem",
+        "window.localStorage.setItem",
+        "window.location.assign",
+        "encodeURIComponent(query)",
+        "https://www.google.com/search?q=",
+        "https://www.bing.com/search?q=",
+        "https://duckduckgo.com/?q=",
+        "https://search.brave.com/search?q=",
+    ):
+        assert token in script, f"offline new-tab script missing: {token}"
+
+    upstream_validator = read("tools/validate_upstream_new_tab_page.py")
+    for token in (
+        "fetch_gitiles_text",
+        "module.apply(root)",
+        'html.count("<!-- NAUTRIX_NEW_TAB_PAGE_BEGIN -->") == 1',
+        'script.count("// NAUTRIX_NEW_TAB_PAGE_BEGIN") == 1',
+        'routing.count("// NAUTRIX_NEW_TAB_ROUTING_BEGIN") == 1',
+    ):
+        assert token in upstream_validator, (
+            f"new-tab upstream validation missing: {token}"
+        )
+
+
 def validate_trading_latency_tools() -> None:
     patch = read("tools/apply_trading_latency.py")
     for token in (
@@ -289,6 +345,7 @@ def validate_automation(*, run_package_validation: bool = True) -> None:
 
     hosted_validation = read(".github/workflows/validate-chromium-layer.yml")
     assert "validate_upstream_product_identity.py" in hosted_validation
+    assert "validate_upstream_new_tab_page.py" in hosted_validation
 
     package = read("tools/package_test_installer.ps1")
     for token in (
@@ -392,6 +449,8 @@ def validate_automation(*, run_package_validation: bool = True) -> None:
         "Browser --version failed",
         "Headless navigation failed",
         "did not contain expected output",
+        "chrome://newtab/",
+        "nautrix-title",
         "DNS benchmark returned success without producing metrics",
         "selected=(?!system",
     ):
@@ -411,6 +470,7 @@ def validate_automation(*, run_package_validation: bool = True) -> None:
 
     bootstrap = read("tools/bootstrap_chromium.cmd")
     for token in (
+        "apply_new_tab_page.py",
         "apply_installer_integration.py",
         "apply_preconnect.py",
         "apply_trading_priority.py",
@@ -423,6 +483,7 @@ def validate_automation(*, run_package_validation: bool = True) -> None:
 def main() -> int:
     validate_configs()
     validate_native_tools()
+    validate_new_tab_page_layer()
     validate_trading_latency_tools()
     validate_pgo()
     validate_security_and_distribution_policy()

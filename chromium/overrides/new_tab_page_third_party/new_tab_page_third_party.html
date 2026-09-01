@@ -1,0 +1,366 @@
+<!doctype html>
+<html dir="$i18n{textdirection}" lang="$i18n{language}"
+    $i18n{hascustombackground} $i18n{isdark} $i18n{webuiRoundedIconsAttribute}>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>$i18n{title}</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --nautrix-accent: #5b5cf0;
+        --nautrix-accent-hover: #494bd8;
+        --nautrix-background: #f4f6fb;
+        --nautrix-background-end: #eef1f8;
+        --nautrix-card: rgba(255, 255, 255, .88);
+        --nautrix-card-border: rgba(23, 28, 45, .1);
+        --nautrix-muted: #667085;
+        --nautrix-shadow: 0 22px 65px rgba(31, 35, 65, .14);
+        --nautrix-text: #171a2b;
+        --ntp-focus-shadow-color: rgba(91, 92, 240, .36);
+        --ntp-theme-text-color: var(--nautrix-text);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        background-attachment: fixed;
+        background-color: $i18n{colorBackground};
+        background-image:
+            radial-gradient(circle at 18% 18%, rgba(91, 92, 240, .13), transparent 34%),
+            radial-gradient(circle at 82% 16%, rgba(28, 181, 154, .1), transparent 31%),
+            linear-gradient(145deg, var(--nautrix-background),
+                                      var(--nautrix-background-end));
+        background-position: $i18n{backgroundPosition};
+        background-repeat: $i18n{backgroundTiling};
+        min-height: 100%;
+        overflow: auto;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --nautrix-background: #11131a;
+          --nautrix-background-end: #191c26;
+          --nautrix-card: rgba(29, 32, 43, .9);
+          --nautrix-card-border: rgba(255, 255, 255, .1);
+          --nautrix-muted: #a9b0c1;
+          --nautrix-shadow: 0 24px 72px rgba(0, 0, 0, .36);
+          --nautrix-text: #f6f7fb;
+          --ntp-focus-shadow-color: rgba(142, 143, 255, .5);
+          --ntp-theme-text-color: white;
+        }
+      }
+
+      html[has-custom-background] {
+        background-image: image-set(
+            url(chrome://theme/IDR_THEME_NTP_BACKGROUND?$i18n{themeId}) 1x,
+            url(chrome://theme/IDR_THEME_NTP_BACKGROUND@2x?$i18n{themeId}) 2x);
+      }
+
+      body {
+        color: var(--nautrix-text);
+        font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+        margin: 0;
+        min-height: 100vh;
+      }
+
+      .page {
+        align-items: center;
+        display: flex;
+        flex-direction: column;
+        margin: 0 auto;
+        max-width: 1120px;
+        min-height: 100vh;
+        padding: 30px 34px 54px;
+        width: 100%;
+      }
+
+      .topbar {
+        align-items: center;
+        display: flex;
+        justify-content: flex-end;
+        min-height: 42px;
+        width: 100%;
+      }
+
+      .engine-control {
+        align-items: center;
+        background: var(--nautrix-card);
+        border: 1px solid var(--nautrix-card-border);
+        border-radius: 14px;
+        box-shadow: 0 8px 28px rgba(31, 35, 65, .08);
+        display: flex;
+        gap: 8px;
+        padding: 7px 9px 7px 13px;
+      }
+
+      .engine-control label {
+        color: var(--nautrix-muted);
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      #search-engine {
+        background: transparent;
+        border: 0;
+        color: var(--nautrix-text);
+        cursor: pointer;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 650;
+        outline: 0;
+        padding: 4px 22px 4px 4px;
+      }
+
+      #search-engine:focus-visible,
+      .search-shell:focus-within {
+        box-shadow: 0 0 0 4px var(--ntp-focus-shadow-color);
+      }
+
+      .hero {
+        align-items: center;
+        display: flex;
+        flex: 1 0 auto;
+        flex-direction: column;
+        justify-content: center;
+        max-width: 760px;
+        padding: 80px 0 38px;
+        text-align: center;
+        width: 100%;
+      }
+
+      .brand-mark {
+        align-items: center;
+        background: linear-gradient(145deg, #6f70ff, #4647d7);
+        border-radius: 22px;
+        box-shadow: 0 18px 38px rgba(75, 76, 222, .28);
+        color: white;
+        display: flex;
+        font-size: 33px;
+        font-weight: 800;
+        height: 72px;
+        justify-content: center;
+        letter-spacing: -.08em;
+        margin-bottom: 21px;
+        padding-right: .08em;
+        width: 72px;
+      }
+
+      h1 {
+        font-size: clamp(38px, 6vw, 58px);
+        letter-spacing: -.055em;
+        line-height: 1;
+        margin: 0;
+      }
+
+      .subtitle {
+        color: var(--nautrix-muted);
+        font-size: 15px;
+        margin: 15px 0 29px;
+      }
+
+      .search-form {
+        width: 100%;
+      }
+
+      .search-shell {
+        align-items: center;
+        background: var(--nautrix-card);
+        border: 1px solid var(--nautrix-card-border);
+        border-radius: 22px;
+        box-shadow: var(--nautrix-shadow);
+        display: flex;
+        min-height: 66px;
+        overflow: hidden;
+        padding: 7px;
+        transition: box-shadow 150ms ease;
+      }
+
+      .search-icon {
+        border: 2px solid currentColor;
+        border-radius: 50%;
+        color: var(--nautrix-muted);
+        flex: 0 0 auto;
+        height: 17px;
+        margin: 0 15px 0 17px;
+        position: relative;
+        width: 17px;
+      }
+
+      .search-icon::after {
+        background: currentColor;
+        border-radius: 2px;
+        bottom: -5px;
+        content: "";
+        height: 7px;
+        position: absolute;
+        right: -4px;
+        transform: rotate(-45deg);
+        width: 2px;
+      }
+
+      #search-input {
+        background: transparent;
+        border: 0;
+        color: var(--nautrix-text);
+        flex: 1;
+        font: inherit;
+        font-size: 17px;
+        min-width: 0;
+        outline: 0;
+        padding: 12px 0;
+      }
+
+      #search-input::placeholder {
+        color: var(--nautrix-muted);
+        opacity: .88;
+      }
+
+      .search-button {
+        background: var(--nautrix-accent);
+        border: 0;
+        border-radius: 16px;
+        color: white;
+        cursor: pointer;
+        font: inherit;
+        font-size: 14px;
+        font-weight: 700;
+        min-height: 50px;
+        padding: 0 23px;
+        transition: background-color 140ms ease, transform 140ms ease;
+      }
+
+      .search-button:hover {
+        background: var(--nautrix-accent-hover);
+      }
+
+      .search-button:active {
+        transform: scale(.97);
+      }
+
+      .local-badge {
+        align-items: center;
+        color: var(--nautrix-muted);
+        display: flex;
+        font-size: 12px;
+        gap: 7px;
+        margin-top: 17px;
+      }
+
+      .local-badge::before {
+        background: #22b07d;
+        border-radius: 50%;
+        content: "";
+        height: 7px;
+        width: 7px;
+      }
+
+      .shortcuts {
+        align-items: center;
+        display: flex;
+        flex-direction: column;
+        padding-top: 10px;
+        width: 100%;
+      }
+
+      .shortcuts-title {
+        color: var(--nautrix-muted);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: .08em;
+        margin: 0 0 13px;
+        text-transform: uppercase;
+      }
+
+      cr-most-visited {
+        --most-visited-focus-shadow: 0 0 0 2px var(--ntp-focus-shadow-color);
+        --most-visited-text-color: var(--ntp-theme-text-color);
+        --most-visited-text-shadow: none;
+        max-width: 900px;
+        width: 100%;
+      }
+
+      html[has-custom-background] .engine-control,
+      html[has-custom-background] .search-shell {
+        backdrop-filter: blur(22px);
+      }
+
+      html[has-custom-background] h1,
+      html[has-custom-background] .subtitle,
+      html[has-custom-background] .local-badge,
+      html[has-custom-background] .shortcuts-title {
+        color: var(--ntp-theme-text-color);
+        text-shadow: 0 2px 14px rgba(0, 0, 0, .28);
+      }
+
+      html[has-custom-background] cr-most-visited {
+        --most-visited-text-shadow: 0 0 16px rgba(0, 0, 0, .3);
+      }
+
+      @media (max-width: 680px) {
+        .page {
+          padding: 20px 18px 38px;
+        }
+
+        .hero {
+          padding-top: 54px;
+        }
+
+        .search-shell {
+          border-radius: 18px;
+          min-height: 60px;
+        }
+
+        .search-button {
+          border-radius: 13px;
+          min-height: 46px;
+          padding: 0 16px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- NAUTRIX_NEW_TAB_PAGE_BEGIN -->
+    <script type="module" src="strings.m.js"></script>
+    <main class="page">
+      <header class="topbar">
+        <div class="engine-control">
+          <label for="search-engine">Buscar com</label>
+          <select id="search-engine" aria-label="Escolher motor de busca">
+            <option value="google">Google</option>
+            <option value="bing">Bing</option>
+            <option value="duckduckgo">DuckDuckGo</option>
+            <option value="brave">Brave Search</option>
+          </select>
+        </div>
+      </header>
+
+      <section class="hero" aria-labelledby="nautrix-title">
+        <div class="brand-mark" aria-hidden="true">N</div>
+        <h1 id="nautrix-title">Nautrix</h1>
+        <p class="subtitle">Uma nova aba rápida, limpa e pronta para pesquisar.</p>
+
+        <form id="search-form" class="search-form" role="search">
+          <div class="search-shell">
+            <span class="search-icon" aria-hidden="true"></span>
+            <input id="search-input" type="search" autocomplete="off"
+                spellcheck="false" autofocus
+                placeholder="Pesquisar no Google ou digitar uma busca"
+                aria-label="Pesquisar na web">
+            <button class="search-button" type="submit">Pesquisar</button>
+          </div>
+        </form>
+        <div class="local-badge">Página inicial armazenada no Nautrix</div>
+      </section>
+
+      <section class="shortcuts" aria-labelledby="shortcuts-title">
+        <h2 id="shortcuts-title" class="shortcuts-title">Sites mais acessados</h2>
+        <cr-most-visited></cr-most-visited>
+      </section>
+    </main>
+    <script type="module" src="new_tab_page_third_party.js"></script>
+    <link rel="stylesheet" href="chrome://resources/css/text_defaults_md.css">
+  </body>
+</html>

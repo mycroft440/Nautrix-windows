@@ -40,6 +40,10 @@ jobs:
         shell: pwsh
         run: python tools/validate_upstream_product_identity.py
 
+      - name: Validate offline new-tab page against pinned Chromium
+        shell: pwsh
+        run: python tools/validate_upstream_new_tab_page.py
+
       - name: Validate DNS and preconnect patches against pinned Chromium
         shell: pwsh
         run: python tools/validate_upstream_dns_patch.py

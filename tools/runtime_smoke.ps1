@@ -18,6 +18,7 @@ $version | Set-Content -Encoding utf8 (Join-Path $OutputDir 'version.txt')
 
 $checks = @(
     [pscustomobject]@{ url = 'data:text/html,<title>Nautrix Smoke</title><h1 id="marker">nautrix-smoke-ok</h1>'; expected = 'nautrix-smoke-ok'; name = 'local' },
+    [pscustomobject]@{ url = 'chrome://newtab/'; expected = 'nautrix-title'; name = 'new-tab' },
     [pscustomobject]@{ url = 'https://example.com'; expected = 'Example Domain'; name = 'example-com' },
     [pscustomobject]@{ url = 'https://www.google.com'; expected = '<html'; name = 'google-com' }
 )
