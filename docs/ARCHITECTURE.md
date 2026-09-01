@@ -4,6 +4,13 @@
 
 Nautrix is a downstream Windows browser built from the full Chromium source tree. It is not an application embedding WebView2, CEF, or Electron. Chromium itself is checked out under `.chromium-work`, pinned by `chromium/VERSION`, and patched by `tools/apply_nautrix.py`.
 
+The bootstrap also applies `tools/apply_new_tab_page.py` to Chromium's
+`new_tab_page_third_party` WebUI. The Nautrix HTML and TypeScript overrides are
+compiled into Chromium resources, so their layout and controls remain available
+offline. The selected search engine is stored in the page's local profile
+storage; Google is used when no valid selection exists. Network navigation
+begins only when a search is submitted or a shortcut is opened.
+
 ## Process model
 
 Chromium's browser, Network Service, GPU, renderer and utility process separation is preserved. Latency-sensitive Nautrix code must not depend on renderer/DOM/JavaScript execution.

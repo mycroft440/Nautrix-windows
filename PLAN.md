@@ -80,6 +80,12 @@ exist. Gates that require a complete Windows Chromium binary remain unchecked.
 
 - [ ] Tabs / multiple windows.
 - [ ] Address bar and search.
+- [x] Nautrix offline new-tab source layer with no remotely hosted page assets.
+- [x] Search-engine selector on the new-tab page, persisted locally, with Google as the default.
+- [x] Bing, DuckDuckGo and Brave Search selectable from the new-tab page.
+- [x] Route every standard desktop new-tab request to the Nautrix local page, independent of the browser-wide search provider.
+- [x] Add a full-binary runtime smoke assertion for the routed Nautrix new-tab DOM.
+- [ ] Compile and interactively validate the Nautrix new-tab page in the complete Windows binary.
 - [ ] Downloads.
 - [ ] History and bookmarks.
 - [ ] Cookies and persistent sessions.

@@ -85,6 +85,10 @@ echo [Nautrix] Applying product/network layer...
 python "%ROOT%\tools\apply_nautrix.py" "%SRC%"
 if errorlevel 1 exit /b 1
 
+echo [Nautrix] Applying offline new-tab page...
+python "%ROOT%\tools\apply_new_tab_page.py" "%SRC%"
+if errorlevel 1 exit /b 1
+
 echo [Nautrix] Applying native Windows installer/shell integration...
 python "%ROOT%\tools\apply_installer_integration.py" "%SRC%"
 if errorlevel 1 exit /b 1

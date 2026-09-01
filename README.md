@@ -12,6 +12,18 @@ The repository stores a small downstream product/network layer rather than vendo
 - normal Chromium tabs, storage, downloads, DevTools, extension platform and modern web stack inherited from upstream (runtime verification follows the first complete build)
 - no Google Chrome branding or private Chrome Sync credentials
 
+## Offline new-tab page
+
+Nautrix replaces Chromium's third-party new-tab resources during bootstrap with
+an embedded, offline-first Nautrix page. The layout, styles and behavior ship in
+the browser binary and do not depend on a hosted home page or remote visual
+assets. It includes the existing local most-visited component and a search box
+with a locally persisted engine selector. Google is the first-launch default;
+Bing, DuckDuckGo and Brave Search are also available. Internet access is used
+only after the user submits a search or opens a site. Nautrix also routes every
+standard desktop new-tab request to this local page, independent of Chromium's
+browser-wide default search provider.
+
 ## Network / low latency
 
 The native `NautrixLauncher.exe` implements browser-local DNS selection and latency preparation before starting Chromium:
@@ -97,7 +109,9 @@ tools\build_chromium.cmd
 tools\run_nautrix.cmd
 ```
 
-The bootstrap applies the Nautrix product/DNS layer, keep-alive preconnect patch, trading priority/discard patch, and per-site network/Blink scheduling patch to the exact pinned Chromium source tree.
+The bootstrap applies the Nautrix product/DNS layer, offline new-tab page,
+keep-alive preconnect patch, trading priority/discard patch, and per-site
+network/Blink scheduling patch to the exact pinned Chromium source tree.
 
 See `docs/CHROMIUM_BUILD.md` for the Windows requirements. A complete Chromium build requires a much larger disk/RAM environment than standard hosted CI.
 
