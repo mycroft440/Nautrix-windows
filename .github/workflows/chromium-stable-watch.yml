@@ -50,7 +50,7 @@ jobs:
           fi
 
       - name: Maintain the Stable update issue
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           PINNED_VERSION: ${{ steps.versions.outputs.pinned }}
           STABLE_VERSION: ${{ steps.versions.outputs.stable }}
